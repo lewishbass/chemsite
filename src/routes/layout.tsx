@@ -37,14 +37,14 @@ export default component$(() => {
             </nav>
 
             {/* ── Page content ──────────────────────────────────── */}
-            <main class="pt-[72px]">
+            <main class="pt-[72px] overflow-x-hidden min-h-[calc(100vh-72px)]">
                 <Slot />
             </main>
 
             {/* ── Footer ───────────────────────────────────────── */}
             <footer class="border-t border-edge">
                 <div class="max-w-[1480px] mx-auto px-8 py-5 flex items-center justify-between text-xs text-muted">
-                    <span>© 2026 LabViz · Chemistry Data Platform</span>
+                    <span>© 2026 Labby · Chemistry Automation Platform</span>
                     <span>Built on Qwik + Netlify Edge</span>
                 </div>
             </footer>

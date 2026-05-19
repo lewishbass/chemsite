@@ -25,7 +25,34 @@ export const ICONS = {
 
   list:
         `<path d="M11.2 29.8H37M2.8 27.7h4.1v4.1H2.8Zm8.4-7.7H37M2.8 18h4.1v4H2.8Zm8.4-7.8H37m-34.2-2h4.1v4.1H2.8Z" ${STYLE}/>`,
-  
+
+  molecule:
+    `<circle cx="20" cy="20" r="4" ${STYLE}/>` +
+    `<circle cx="7" cy="11" r="3" ${STYLE}/>` +
+    `<circle cx="33" cy="11" r="3" ${STYLE}/>` +
+    `<circle cx="7" cy="29" r="3" ${STYLE}/>` +
+    `<circle cx="33" cy="29" r="3" ${STYLE}/>` +
+    `<path d="M10 12.8L16 17M24 17L30 12.8M10 27.2L16 23M24 23L30 27.2M7 14V26M33 14V26" ${STYLE}/>`,
+
+  gear:
+    `<circle cx="20" cy="20" r="6" ${STYLE}/>` +
+    `<path d="M20 4v5m0 22v5M4 20h5m22 0h5M7.5 7.5l3.5 3.5m18 18 3.5 3.5M32.5 7.5l-3.5 3.5m-18 18-3.5 3.5" ${STYLE}/>`,
+
+  funnel:
+    `<path d="M4 7h32L24 20v13l-8-4V20Z" ${STYLE}/>`,
+
+  brain:
+    `<circle cx="20" cy="7" r="3" ${STYLE}/>` +
+    `<circle cx="8" cy="19" r="3" ${STYLE}/>` +
+    `<circle cx="32" cy="19" r="3" ${STYLE}/>` +
+    `<circle cx="13" cy="33" r="3" ${STYLE}/>` +
+    `<circle cx="27" cy="33" r="3" ${STYLE}/>` +
+    `<circle cx="20" cy="23" r="3" ${STYLE}/>` +
+    `<path d="M20 10L20 20M20 10L11 17M20 10L29 17M11 19L17 22M29 19L23 22M8 22L13 30M32 22L27 30M17 25L13 30M23 25L27 30" ${STYLE}/>`,
+
+  transform:
+    `<path d="M6 13h26m0 0-5-5m5 5-5 5M34 27H8m0 0 5-5m-5 5 5 5" ${STYLE}/>`,
+
 } as const;
 
 export type IconName = keyof typeof ICONS;

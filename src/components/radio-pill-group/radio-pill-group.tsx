@@ -3,8 +3,8 @@ import { LuBot, LuChevronDown, LuCompass, LuDatabase, LuFolders, LuHardDrive, Lu
 import './radio-pill-group.css';
 
 const iconMap: Record<string, Component<Record<string, unknown>>> = {
-    Collection: LuDatabase,
-    Features: LuStar,
+    'Data Flow': LuDatabase,
+    Tests: LuStar,
     Organization: LuFolders,
     Storage: LuHardDrive,
     Analysis: LuPieChart,

@@ -108,6 +108,12 @@ const TEMP_W = 290, TEMP_H = 165;
 const TEMP_BASE = 128, TEMP_LEFT = 28, TEMP_RIGHT = 280, TEMP_TOP = 20;
 const RAMP = 0.15, HOLD = 0.70;
 
+function tempNoiseAtTime(t: number, nPhases: number[], nFreqs: number[], nMags: number[]): number {
+    let noise = 0;
+    for (let fi = 0; fi < nPhases.length; fi++)noise += nMags[fi] * Math.sin(nFreqs[fi] * t * fi + nPhases[fi]);
+    return noise;
+}
+
 function buildTempPath(
     reaction: Reaction,
     nPhases: number[], nFreqs: number[], nMags: number[],
@@ -122,9 +128,7 @@ function buildTempPath(
         if      (t < RAMP)            temp = tMin + tRange * (t / RAMP);
         else if (t < RAMP + HOLD)     temp = tMax;
         else                          temp = tMax - tRange * ((t - RAMP - HOLD) / (1 - RAMP - HOLD));
-        let noise = 0;
-        for (let fi = 0; fi < nPhases.length; fi++)
-            noise += nMags[fi]  * Math.sin(nFreqs[fi] * now + k / N * 15 * fi + nPhases[fi]);
+        let noise = tempNoiseAtTime(now + t * 30_000, nPhases, nFreqs, nMags);
         const normT = (temp - tMin) / tRange;
         const x = TEMP_LEFT + t * (TEMP_RIGHT - TEMP_LEFT);
         const y = TEMP_BASE - normT * (TEMP_BASE - TEMP_TOP) + noise;
@@ -210,7 +214,7 @@ export const ReactionDetail = component$(({ reaction }: { reaction: Reaction }) 
         const onTmpMove = (e: MouseEvent) => {
             if (!tmpSvg) return;
             const rect = tmpSvg.getBoundingClientRect();
-            tmpMouseX = (e.clientX - rect.left) * (TEMP_W / rect.width);
+            tmpMouseX = (e.clientX - rect.left - TEMP_LEFT) * (1) - 2;
             tmpHovering = true;
         };
         const onTmpLeave = () => { tmpHovering = false; };
@@ -298,17 +302,33 @@ export const ReactionDetail = component$(({ reaction }: { reaction: Reaction }) 
             tmpPath?.setAttribute('d', buildTempPath(reaction, nPhases, nFreqs, nMags, now));
             // Crosshair + tooltip
             if (tmpHovering && tmpMouseX >= TEMP_LEFT && tmpMouseX <= TEMP_RIGHT) {
-                const t = (tmpMouseX - TEMP_LEFT) / (TEMP_RIGHT - TEMP_LEFT);
+                // Map x → path parameter k ∈ [0, N] using only the draw domain
+                const N_P = 180;
+                const kExact = (tmpMouseX - TEMP_LEFT) / (TEMP_RIGHT - TEMP_LEFT) * N_P;
+                const k0 = Math.floor(kExact), k1 = Math.min(k0 + 1, N_P);
+                const alpha = kExact - k0;
+                const t = kExact / N_P; // normalised [0,1] for tooltip values
+                // Compute the SVG y at a discrete path index exactly as buildTempPath does,
+                // so the dot sits on the animated polyline with correct noise baked in
+                const pathYAtK = (ki: number): number => {
+                    const tp = ki / N_P;
+                    const pMin = 25, pMax = reaction.tempC, pRange = Math.max(pMax - pMin, 1);
+                    let pTemp: number;
+                    if (tp < RAMP) pTemp = pMin + pRange * (tp / RAMP);
+                    else if (tp < RAMP + HOLD) pTemp = pMax;
+                    else pTemp = pMax - pRange * ((tp - RAMP - HOLD) / (1 - RAMP - HOLD));
+                    let pNoise = 0;
+                    for (let fi = 0; fi < nPhases.length; fi++)
+                        pNoise += nMags[fi] * Math.sin(nFreqs[fi] * now + tp * 5 + nPhases[fi]);
+                    return TEMP_BASE - ((pTemp - pMin) / pRange) * (TEMP_BASE - TEMP_TOP) + pNoise;
+                };
+                const dotY = pathYAtK(k0) + alpha * (pathYAtK(k1) - pathYAtK(k0)) + tempNoiseAtTime(now + t * 30_000, nPhases, nFreqs, nMags);
+                // Noiseless temperature for the readable tooltip value
                 const tMin = 25, tMax = reaction.tempC, tRange = Math.max(tMax - tMin, 1);
                 let tTemp: number;
                 if      (t < RAMP)            tTemp = tMin + tRange * (t / RAMP);
                 else if (t < RAMP + HOLD)     tTemp = tMax;
-                else                          tTemp = tMax - tRange * ((t - RAMP - HOLD) / (1 - RAMP - HOLD));
-                let tNoise = 0;
-                for (let fi = 0; fi < nPhases.length; fi++)
-                    tNoise += nMags[fi] * Math.sin(nFreqs[fi] * now + t * 5 + nPhases[fi]);
-                const normT = (tTemp - tMin) / tRange;
-                const dotY = TEMP_BASE - normT * (TEMP_BASE - TEMP_TOP) + tNoise;
+                else tTemp = tMax - tRange * ((t - RAMP - HOLD) / (1 - RAMP - HOLD));
                 const mx = tmpMouseX.toFixed(1);
                 tmpCrossLine?.setAttribute('x1', mx); tmpCrossLine?.setAttribute('x2', mx);
                 tmpCrossLine?.setAttribute('opacity', '0.45');

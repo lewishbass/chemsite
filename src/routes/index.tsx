@@ -17,7 +17,7 @@ import { DynamicGraphDemo } from '~/components/graphs/dynamic-graph-demo/dynamic
 import { DynamicGraphDemo2 } from '~/components/graphs/dynamic-graph-demo-2/dynamic-graph-demo-2';
 
 export default component$(() => {
-  const activeDbCategory = useSignal('Collection');
+  const activeDbCategory = useSignal('Data Flow');
   const activeMlCategory = useSignal('Classification');
   const svgRef = useSignal<SVGSVGElement>();
 
@@ -140,12 +140,12 @@ export default component$(() => {
             <div class="corner-decor" />
             <div class="h-[500px] text-center relative">
               {/**categories map and scroll section */}
-              <RadioPillGroup labels={['Collection', 'Features', 'Organization', 'Storage', 'Analysis']} active={activeDbCategory} />
+              <RadioPillGroup labels={['Data Flow', 'Tests', 'Organization', 'Storage', 'Analysis']} active={activeDbCategory} />
               <FadingDisplay active_id={activeDbCategory}>
-                <FadingSection id="Collection">
+                <FadingSection id="Data Flow">
                   <CollectionGraph />
                 </FadingSection>
-                <FadingSection id="Features">
+                <FadingSection id="Tests">
                   <FeaturesGraph />
                 </FadingSection>
                 <FadingSection id="Organization">

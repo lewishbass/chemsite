@@ -67,18 +67,18 @@ npm run build # or `yarn build`
 
 ## TODO
 
- - interactive graph
+ - interactive clustering graph
  - integrate stoat communication
 
  - interactive 3d models of molecules
 
  - admin equipment command dashboard
- - interactive dummy database dashboard
  - data visualizations on dashboard (maybe some clustering)
 
 
 ## Done
  - bold dynamic splash page
+ - interactive dummy database dashboard
 
 # Graphs
 
@@ -87,6 +87,11 @@ conditions: reagent rations, temp, time, solvent, modulator
  - synthesis -> yield, crystalilinity
  - synthesis -> structure, PXRD phase, BET surface area, pore geometry
  - structure -> function, CO2 uptake, binding affinity, catalytic activity
+
+### LLM-Assisted Architecture
+ - experiment description -> actionable instruction set (MCP)
+ - Deterministic Compiler : convert llm output to robust instructions, deterministic
+
 
 ## DB
 
@@ -119,4 +124,9 @@ test validation
 
 Phases
 Experimental Design: ELN synthesis, every experiment carried out must have an ELN associated
-Synthesis Execution: 
+Synthesis Execution: Stuntman platform worklist (quantity and position)
+Triage Characterization: high throughput, determine if product is useful, Raman screen, Powder XRD, XRF screen
+Result Classification: (hit, ambiguous, negative, invalid)
+Full level 1 characterization: BET, Pore Size, Particle size, PXRD, FTIR, RAMEN, TGGA, ELEMENT analysis, isothermal calorimetry
+Functional Testing: Gas Absorbtion / selectivity, catalytic activity, binding affinity, water/chemical stability, optical, electrochemical
+

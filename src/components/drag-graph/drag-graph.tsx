@@ -358,7 +358,7 @@ export const DragGraph = component$(({ nodes, edges }: DragGraphProps) => {
             const hbY = height + 6;
 
             return (
-              <g key={node.uuid} class="dg-node" data-href={node.href} transform={`translate(${x},${y})`}>
+              <g key={node.uuid} class="dg-node user-select-none" data-href={node.href} transform={`translate(${x},${y})`}>
                 {/* Label above the node */}
                 {node.label && (
                   <text
