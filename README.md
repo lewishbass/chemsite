@@ -63,3 +63,60 @@ The production build will generate client and server modules by running both cli
 ```shell
 npm run build # or `yarn build`
 ```
+
+
+## TODO
+
+ - interactive graph
+ - integrate stoat communication
+
+ - interactive 3d models of molecules
+
+ - admin equipment command dashboard
+ - interactive dummy database dashboard
+ - data visualizations on dashboard (maybe some clustering)
+
+
+## Done
+ - bold dynamic splash page
+
+# Graphs
+
+## ML
+conditions: reagent rations, temp, time, solvent, modulator
+ - synthesis -> yield, crystalilinity
+ - synthesis -> structure, PXRD phase, BET surface area, pore geometry
+ - structure -> function, CO2 uptake, binding affinity, catalytic activity
+
+## DB
+
+### INPUT STREAM
+Physical Data (components, tools)
+Process Data (operation that acts on the molecule)
+
+### OUTPUT STREAM
+Sample Data
+Sample ID
+
+## TEST REGISTRY
+
+test definition structure
+ - test id
+ - level, identity/function
+ - method (Complete Procedure)
+ - parent / child (inheritance from more generic tests)
+ - instruments ( hardware id and category )
+ - throughput (samples/hr)
+ - sample requirements (mass, volume, state)
+ - output data (type, size, format)
+ - status (active, inactive, in development, deprecated)
+ 
+test validation
+- proposed by members
+- validated by chemist
+- confirms it is sound and reproducible
+- updating test procedure creates new test id, marks old a deprecated
+
+Phases
+Experimental Design: ELN synthesis, every experiment carried out must have an ELN associated
+Synthesis Execution: 

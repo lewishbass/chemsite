@@ -1,0 +1,293 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── Backgrounds ─────────────────────────────────── */
+  --color-surface: #131414;   /* bg 1  – deepest background  */
+  --color-canvas:  #171819;   /* bg 2  – panels / cards      */
+  --color-canvas-light: #2c3033; /* bg 3  – alternate canvas     */
+
+  /* ── Borders ─────────────────────────────────────── */
+  --color-rim:  #2f3233;      /* border 1 – standard         */
+  --color-edge: #212323;      /* border 2 – subtle dividers  */
+
+  /* ── Text ────────────────────────────────────────── */
+  --color-ink:   #dae8ed;     /* text 1 – primary            */
+  --color-muted: #98a1a5;     /* text 2 – secondary          */
+
+  /* ── Highlights ──────────────────────────────────── */
+  --color-accent:  #00a6eb;   /* highlight – blue            */
+  --color-amber:   #dda05e;   /* hl 2     – amber/orange     */
+  --color-emerald: #00bd3f;   /* hl 3     – green            */
+
+  --outer-width: 1200px; /* max content width for large screens */
+  --inner-width: 900px;  /* max content width for text-heavy sections */
+}
+
+@media (max-width: 1224px) {
+  :root {
+    --outer-width: 740px;
+    --inner-width: 560px;
+  }
+
+}
+
+
+@media (max-width: 768px) {
+  :root {
+    --outer-width: 460px;
+    --inner-width: 350px;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --outer-width: 300px;
+    --inner-width: 250px;
+  }
+}
+
+@layer base {
+  body {
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+  }
+
+  /* ── Cloudflare-inspired type scale ─────────────── */
+  h1 {
+    font-size: 3.5rem;
+    font-weight: 500;
+    letter-spacing: -0.025em;
+    line-height: 0.99;
+  }
+
+  h2 {
+    font-size:3rem;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+
+  h3 {
+    font-size: 1.375rem;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    line-height: 1.2;
+  }
+
+  p {
+    letter-spacing: -0.0025em;
+    line-height: 1.6;
+  }
+}
+
+@layer components {
+  .text-ink{
+    color: var(--color-ink);
+  }
+  .text-muted{
+    color: var(--color-muted);
+  }
+ 
+
+  /* ── Dotted Grid Background (section-level) ──────── */
+  .grid-structure {
+    position: relative;
+    background-color: var(--color-canvas);
+    background-image: radial-gradient(var(--color-rim) 1px, transparent 1px);
+    background-size: 18px 18px;
+    background-position: -1px -1px;
+  }
+
+  /* ── Dot-grid bg only (no border, for nested cells) ─ */
+  .grid-bg {
+    background-color: var(--color-canvas);
+    background-image: radial-gradient(var(--color-rim) 1px, transparent 1px);
+    background-size: 18px 18px;
+    background-position: -1px -1px;
+  }
+
+  /* ── Section Container with Corners ──────────────── */
+  .subsection-container {
+    position: relative;
+    outline: 1px solid var(--color-rim);
+  }
+
+  /* ── Corner Decor — stretches over parent ─────────── */
+  .corner-decor {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  /* ── Corner Squares ──────────────────────────────── */
+  .subsection-container::before,
+  .subsection-container::after,
+  .corner-decor::before,
+  .corner-decor::after {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-rim);
+    border-radius: 3px;
+    z-index: 10;
+  }
+
+  .subsection-container::before { top: -7px;    left:  -7px; }
+  .subsection-container::after  { top: -7px;    right: -7px; }
+  .corner-decor::before      { bottom: -7px;    left:  -7px; }
+  .corner-decor::after       { bottom: -7px;    right: -7px; }
+  
+
+  /* ── Section Container with Dotted Line  ─ */
+  .section-container {
+    max-width: var(--outer-width);
+    margin: 0 auto;
+    position: relative;
+  }
+
+  .section-container::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100vw;
+    background-image: repeating-linear-gradient(90deg, var(--color-rim) 0px, var(--color-rim) 20px, transparent 20px, transparent 40px);
+    border: none;
+    height: 1px;
+  }
+
+  .section-container.solid::after {
+    background-image: none;
+    border-top: 1px solid var(--color-rim);
+  }
+
+  .section-padding{
+    flex-grow: 1;
+    align-self: stretch;
+    position: relative;
+    background-image: radial-gradient(color-mix(in srgb, var(--color-rim), transparent 50%) 1px, transparent 1px);
+    background-size: 12px 12px;
+    background-position: -1px -1px;
+  }
+
+  .dash-left::before,
+  .dash-right::after {
+     content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background-image: repeating-linear-gradient(
+      180deg,
+      var(--color-rim) 0px,
+      var(--color-rim) 20px,
+      transparent 20px,
+      transparent 40px
+    );
+    pointer-events: none;
+  }
+
+
+  .dash-left::before  { left: 0; }
+  .dash-right::after  { right: 0; }
+
+  .section-padding::before { left: 0; }
+  .section-padding::after  { right: 0; }
+
+  /* ── Hero Section Specifics ───────────────────────── */
+  .hero-section {
+    background-color: var(--color-accent);
+    border-radius: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ── Multi-select / Pill Buttons ─────────────────── */
+  .btn-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-rim);
+    border-radius: 9999px;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    font-weight: 600;
+    user-select: none;
+  }
+
+  .btn-pill.alternate {
+    background-color: white;
+    color: black;
+    border-color: white;
+  }
+
+  .btn-pill:hover {
+    filter:brightness(1.2);
+    border-color: var(--color-accent);
+  }
+
+  .btn-pill.active {
+    filter:brightness(0.7);
+    border-color: var(--color-accent);
+  }
+
+}
+
+/* ── Scroll-through word animation ───────────────── */
+@keyframes word-enter-a {
+  from { opacity: 0; transform: translateY(-1em); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes word-enter-b {
+  from { opacity: 0; transform: translateY(-1em); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes word-exit-a {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(1em); }
+}
+@keyframes word-exit-b {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(1em); }
+}
+
+
+.mini-scroll::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.mini-scroll::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+}
+
+.mini-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+}
+
+.mini-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+@media print{
+  .mini-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  .mini-scroll::-webkit-scrollbar-track {
+    display: none;
+  }
+  .mini-scroll::-webkit-scrollbar-thumb {
+    display: none;
+  }
+  .mini-scroll::-webkit-scrollbar-thumb:hover {
+    display: none;
+  }
+}

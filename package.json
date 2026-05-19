@@ -36,6 +36,11 @@
     "typescript-plugin-css-modules": "latest",
     "undici": "*",
     "vite": "7.3.1",
-    "vite-tsconfig-paths": "^4.2.1"
+    "vite-tsconfig-paths": "^4.2.1",
+    "@qwikest/icons": "^0.0.13"
+    },
+    "dependencies": {
+      "@tailwindcss/vite": "^4.3.0",
+      "tailwindcss": "^4.3.0"
   }
 }

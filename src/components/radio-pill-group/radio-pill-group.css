@@ -1,0 +1,98 @@
+.radio-pill {
+  padding: 0.25rem 0.75rem;
+  color: var(--color-ink);
+  font-size: 1.25rem;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  font-weight: 600;
+  border-radius: 9999px;
+  z-index: 100;
+  user-select: none;
+}
+
+.radio-pill:hover {
+  background-color: #fff2;
+}
+
+
+@media (max-width: 1224px) {
+  .radio-pill-mobile {
+    display: fixed;
+  }
+
+  .radio-pill-bar {
+    display: none;
+  }
+}
+
+@media (min-width: 1225px) {
+  .radio-pill-mobile {
+    display: none;
+  }
+
+  .radio-pill-bar {
+    display: flex;
+  }
+}
+
+/* Mobile expanding pill */
+.radio-pill-mobile {
+  position: relative;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-rim);
+  border-radius: 16px;
+  overflow: hidden;
+  height: 36px;
+  min-width: 160px;
+  /* translateY(-18px) = -half item height: keeps active item (always first) centred on y=0 */
+  transform: translateY(-18px);
+  transition: height 0.3s ease;
+  z-index: 50;
+}
+
+.radio-pill-mobile.open {
+  height: calc(36px * var(--rp-count));
+}
+
+/* Chevron icon rotation */
+.radio-pill-chevron {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  color: currentColor;
+  opacity: 0.7;
+  transition: transform 0.25s ease;
+}
+
+.radio-pill-chevron.open {
+  transform: rotate(180deg);
+}
+
+/* Options */
+.radio-pill-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  height: 36px;
+  padding: 0 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  text-align: left;
+  white-space: nowrap;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.radio-pill-option:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+  color: var(--color-ink);
+}
+
+.radio-pill-option.active {
+  background: linear-gradient(135deg, var(--color-accent) -20%, var(--color-emerald) 140%);
+  color: white;
+}
