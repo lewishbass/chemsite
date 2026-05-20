@@ -2,7 +2,7 @@ import { component$, Slot } from '@builder.io/qwik';
 
 export default component$(() => {
   return (
-    <div class="min-h-screen bg-surface text-ink">
+    <div class="min-h-screen bg-surface text-ink ">
 
 
 
@@ -38,7 +38,7 @@ export default component$(() => {
       </nav>
 
       {/* ── Page content ──────────────────────────────────── */}
-      <main class="pt-[72px] overflow-x-hidden min-h-[calc(100vh-72px)]">
+      <main class="pt-[72px] overflow-x-hidden overflow-y-hidden min-h-[calc(100vh-72px)]">
         <Slot />
       </main>
 
