@@ -59,6 +59,26 @@ export default component$(() => {
       return;
     }
     try {
+      // Complete onboarding (set username) if not yet done — happens for new accounts
+      // and for any existing account that never completed the onboarding step.
+      const onboardRes = await fetch("https://chat.chemistryml.com/api/onboard/hello", {
+        headers: { "x-session-token": token },
+      });
+      if (onboardRes.ok) {
+        const onboardData = await onboardRes.json();
+        if (onboardData.onboarding) {
+          const email = session.value?.user?.email ?? '';
+          const rawName = email.split('@')[0];
+          // Revolt usernames: 2–32 chars, only Unicode letters, digits, _ . -
+          const cleaned = rawName.replace(/[^\p{L}\d_.\-]/gu, '').slice(0, 32);
+          const safeUsername = cleaned.length >= 2 ? cleaned : (cleaned + '00').slice(0, 32);
+          await fetch("https://chat.chemistryml.com/api/onboard/complete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-session-token": token },
+            body: JSON.stringify({ username: safeUsername }),
+          });
+        }
+      }
       const res = await fetch("https://chat.chemistryml.com/api/users/@me", {
         headers: { "x-session-token": token },
       });
@@ -474,6 +494,29 @@ export default component$(() => {
                         body: JSON.stringify({ email, password }),
                       });
                       if (response.status === 204) {
+                        // Set username before Auth.js session is created.
+                        // Log in directly to get a temp token, then POST /onboard/complete.
+                        try {
+                          const loginRes = await fetch("https://chat.chemistryml.com/api/auth/session/login", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ email, password }),
+                          });
+                          if (loginRes.ok) {
+                            const loginData = await loginRes.json();
+                            const tempToken: string | undefined = loginData.token;
+                            if (tempToken) {
+                              const rawName = email.split('@')[0];
+                              const cleaned = rawName.replace(/[^\p{L}\d_.\-]/gu, '').slice(0, 32);
+                              const safeUsername = cleaned.length >= 2 ? cleaned : (cleaned + '00').slice(0, 32);
+                              await fetch("https://chat.chemistryml.com/api/onboard/complete", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json", "x-session-token": tempToken },
+                                body: JSON.stringify({ username: safeUsername }),
+                              });
+                            }
+                          }
+                        } catch { /* if onboarding fails, sign in anyway — the sign-in task will retry */ }
                         form.reset();
                         regPassword.value = "";
                         regConfirmPassword.value = "";

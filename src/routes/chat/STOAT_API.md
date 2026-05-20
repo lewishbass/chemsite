@@ -74,6 +74,86 @@ GET /auth/account/
 
 ---
 
+## Onboarding (Username Setup)
+
+New accounts do not have a username until onboarding is completed. This is a one-time step that **must** happen before the user can be seen in servers or DMs.
+
+### Check onboarding status
+```
+GET /api/onboard/hello
+```
+**Auth:** `x-session-token`  
+**Response:** `{ "onboarding": true }` if the username has not been set yet; `{ "onboarding": false }` otherwise.
+
+### Complete onboarding (set initial username)
+```
+POST /api/onboard/complete
+```
+**Auth:** `x-session-token`  
+**Body:**
+```json
+{ "username": "desired_username" }
+```
+**Response:** `200 OK` with the `User` object on success.
+
+**Username constraints:**
+- 2–32 characters
+- Only Unicode letters (`\p{L}`), digits, `_`, `.`, `-` — regex: `^(\p{L}|[\d_.\-])+$`
+- Must be globally unique (server assigns a numeric discriminator if needed)
+
+> **Important:** This endpoint is called **once** immediately after account creation, before calling `GET /users/@me`. If a user signs in and `GET /onboard/hello` returns `{ "onboarding": true }`, the client must call this endpoint before using the API.
+
+### Integration pattern (registration)
+
+```typescript
+// 1. Create account
+await fetch('/api/auth/account/create', { method: 'POST', body: JSON.stringify({ email, password }) });
+
+// 2. Get a temporary session token to complete onboarding
+const loginData = await fetch('/api/auth/session/login', {
+  method: 'POST', body: JSON.stringify({ email, password })
+}).then(r => r.json());
+
+// 3. Derive username from email local-part; sanitize to allowed charset
+const rawName = email.split('@')[0];
+const username = rawName.replace(/[^\p{L}\d_.\-]/gu, '').slice(0, 32);
+const safeUsername = username.length >= 2 ? username : (username + '00').slice(0, 32);
+
+// 4. Complete onboarding
+await fetch('/api/onboard/complete', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'x-session-token': loginData.token },
+  body: JSON.stringify({ username: safeUsername }),
+});
+
+// 5. Establish Auth.js session (re-authenticates internally)
+await signIn({ email, password });
+```
+
+### Integration pattern (sign-in guard)
+
+On every sign-in, check onboarding status and complete it if needed:
+
+```typescript
+const { onboarding } = await fetch('/api/onboard/hello', {
+  headers: { 'x-session-token': token }
+}).then(r => r.json());
+
+if (onboarding) {
+  const email = session.user.email ?? '';
+  const rawName = email.split('@')[0];
+  const username = rawName.replace(/[^\p{L}\d_.\-]/gu, '').slice(0, 32);
+  const safeUsername = username.length >= 2 ? username : (username + '00').slice(0, 32);
+  await fetch('/api/onboard/complete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-session-token': token },
+    body: JSON.stringify({ username: safeUsername }),
+  });
+}
+```
+
+---
+
 ## User Endpoints
 
 ### Fetch Current User
