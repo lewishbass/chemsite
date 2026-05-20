@@ -67,8 +67,15 @@ npm run build # or `yarn build`
 
 ## TODO
 
- - interactive clustering graph
  - integrate stoat communication
+    - server picker integrated with public rooms
+    - custom/largerender/animated emoji integration
+    - reaction support
+    - reply support
+    - image integration
+    - voice channels
+
+ - interactive clustering graph
 
  - interactive 3d models of molecules
 

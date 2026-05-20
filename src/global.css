@@ -16,6 +16,7 @@
 
   /* ── Highlights ──────────────────────────────────── */
   --color-accent:  #00a6eb;   /* highlight – blue            */
+  --color-accent-muted: #67BEE0;   /* highlight-muted – blue      */
   --color-amber:   #dda05e;   /* hl 2     – amber/orange     */
   --color-emerald: #00bd3f;   /* hl 3     – green            */
 

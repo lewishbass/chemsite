@@ -261,6 +261,33 @@ export const DragGraph = component$(({ nodes, edges }: DragGraphProps) => {
       }
     };
 
+    // Hoverboxes are rendered in a separate layer, so bind node hover events explicitly.
+    const nodeEls = Array.from(svg.querySelectorAll<SVGGElement>('.dg-node[data-node-id]'));
+    const hoverEls = Array.from(svg.querySelectorAll<SVGGElement>('.dg-hoverbox[data-for]'));
+    const hoverById = new Map(
+      hoverEls
+        .map(el => [el.getAttribute('data-for'), el] as const)
+        .filter(([id]) => Boolean(id)),
+    );
+    const removeHoverListeners: Array<() => void> = [];
+
+    nodeEls.forEach(nodeEl => {
+      const nodeId = nodeEl.getAttribute('data-node-id');
+      if (!nodeId) return;
+      const hoverEl = hoverById.get(nodeId);
+      if (!hoverEl) return;
+
+      const onEnter = () => hoverEl.classList.add('dg-hoverbox--visible');
+      const onLeave = () => hoverEl.classList.remove('dg-hoverbox--visible');
+
+      nodeEl.addEventListener('mouseenter', onEnter);
+      nodeEl.addEventListener('mouseleave', onLeave);
+      removeHoverListeners.push(() => {
+        nodeEl.removeEventListener('mouseenter', onEnter);
+        nodeEl.removeEventListener('mouseleave', onLeave);
+      });
+    });
+
     svg.addEventListener('mousedown', onDown);
     svg.addEventListener('click', onClick);
     window.addEventListener('mousemove', onMove);
@@ -271,6 +298,7 @@ export const DragGraph = component$(({ nodes, edges }: DragGraphProps) => {
       svg.removeEventListener('click', onClick);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      removeHoverListeners.forEach(remove => remove());
     });
   });
 
@@ -290,7 +318,7 @@ export const DragGraph = component$(({ nodes, edges }: DragGraphProps) => {
           <circle cx="9" cy="9" r="1" style="fill:#888;opacity:0.15;" />
         </pattern>
         {/* Flow animation keyframes for animated edges */}
-        <style>{`@keyframes dg-flow{to{stroke-dashoffset:-1000}}@keyframes dg-border{to{stroke-dashoffset:${-(DASH_SIZE * 2)}}}.dg-node .dg-hoverbox{visibility:hidden;pointer-events:none;}.dg-node:hover .dg-hoverbox{visibility:visible;}.dg-node[data-href]{cursor:pointer;}`}</style>
+        <style>{`@keyframes dg-flow{to{stroke-dashoffset:-1000}}@keyframes dg-border{to{stroke-dashoffset:${-(DASH_SIZE * 2)}}}.dg-hoverbox{visibility:hidden;pointer-events:none;opacity:0;}.dg-hoverbox.dg-hoverbox--visible{visibility:visible;opacity:1;}.dg-node[data-href]{cursor:pointer;}`}</style>
       </defs>
 
       {/* Everything below pans together */}
@@ -349,16 +377,10 @@ export const DragGraph = component$(({ nodes, edges }: DragGraphProps) => {
             const border = node.border ?? 'corners';
             const shapeStyle = `fill:${color};fill-opacity:${fillOpacity};stroke:${color};stroke-width:1;`;
             const cornerStyle = `fill:rgba(0,0,0,1);stroke:${color};stroke-width:1;`;
-            const hoverLines = node.hover_text ? node.hover_text.split('\n') : [];
-            const hbLineH = 16, hbPadX = 10, hbPadY = 8;
-            const hbMaxChars = hoverLines.reduce((m, l) => Math.max(m, l.length), 0);
-            const hbW = Math.max(width, hbMaxChars * 6.7 + hbPadX * 2, 180);
-            const hbH = hoverLines.length * hbLineH + hbPadY * 2;
-            const hbX = (width - hbW) / 2;
-            const hbY = height + 6;
+
 
             return (
-              <g key={node.uuid} class="dg-node user-select-none" data-href={node.href} transform={`translate(${x},${y})`}>
+              <g key={node.uuid} class="dg-node user-select-none" data-node-id={node.uuid} data-href={node.href} transform={`translate(${x},${y})`}>
                 {/* Label above the node */}
                 {node.label && (
                   <text
@@ -415,22 +437,35 @@ export const DragGraph = component$(({ nodes, edges }: DragGraphProps) => {
                   />
                 )}
 
-                {/* Hover text box */}
-                {node.hover_text && (
-                  <g class="dg-hoverbox" transform={`translate(${hbX},${hbY})`}>
-                    <rect x={0} y={0} width={hbW} height={hbH} rx={3}
-                      style="fill:rgba(10,10,15,0.95);stroke:rgba(255,255,255,0.15);stroke-width:1;" />
-                    {hoverLines.map((line, i) => (
-                      <text key={i} x={hbPadX} y={hbPadY + (i + 0.75) * hbLineH}
-                        style={`${FONT}font-size:11px;font-weight:400;fill:rgba(220,220,220,0.95);`}>
-                        {line || '\u00A0'}
-                      </text>
-                    ))}
-                  </g>
-                )}
+
               </g>
             );
           })}
+          {nodeList.map(node => {
+            const hoverLines = node.hover_text ? node.hover_text.split('\n') : [];
+
+            const { x, y } = node.position;
+            const { width, height } = node.dimensions;
+            const hbLineH = 16, hbPadX = 10, hbPadY = 8;
+            const hbMaxChars = hoverLines.reduce((m, l) => Math.max(m, l.length), 0);
+            const hbW = Math.max(width, hbMaxChars * 6.7 + hbPadX * 2, 180);
+            const hbH = hoverLines.length * hbLineH + hbPadY * 2;
+            const hbX = (width - hbW) / 2;
+            const hbY = height + 6;
+            return (
+              <g key={`hover-${node.uuid}`} class="dg-hoverbox" data-for={node.uuid} transform={`translate(${hbX},${hbY})`}>
+                <rect x={x} y={y} width={hbW} height={hbH} rx={3}
+                  style="fill:rgba(10,10,15,0.95);stroke:rgba(255,255,255,0.15);stroke-width:1;" />
+                {hoverLines.map((line, i) => (
+                  <text key={i} x={hbPadX + x} y={hbPadY + (i + 0.75) * hbLineH + y}
+                    style={`${FONT}font-size:11px;font-weight:400;fill:rgba(220,220,220,0.95);`}>
+                    {line || '\u00A0'}
+                  </text>
+                ))}
+              </g>
+            )
+          }
+          )}
         </g>
       </g>
     </svg>
