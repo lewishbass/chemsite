@@ -137,6 +137,7 @@ export type WsMessage = {
   content?: string | null;
   attachments?: StoatAttachment[];
   replies?: string[];
+  mentions?: string[];  // user IDs of @mentioned users
 };
 
 export type WsMessageUpdate = {

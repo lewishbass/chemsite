@@ -663,7 +663,7 @@ Standard Unicode emoji (👍, ❤️, etc.) appear as raw Unicode characters.
 | `EndTyping` | `channel` | Client → Server |
 | `Authenticated` | — | Server → Client |
 | `Ready` | `users[]`, `servers[]`, `channels[]`, `emojis[]` | Server → Client |
-| `Message` | `_id`, `channel`, `author`, `content?`, `attachments?[]`, `replies?[]` | Server → Client |
+| `Message` | `_id`, `channel`, `author`, `content?`, `attachments?[]`, `replies?[]`, `mentions?[]` | Server → Client |
 | `MessageUpdate` | `id`, `channel`, `data.content` | Server → Client |
 | `MessageDelete` | `id`, `channel` | Server → Client |
 | `MessageReact` | `id` (msg), `channel_id`, `user_id`, `emoji_id` | Server → Client |
@@ -690,6 +690,7 @@ type Message = {
   attachments?: Attachment[];
   reactions?: Record<string, string[]>; // emoji_id → user_id[]
   replies?: string[];                   // message_id[]
+  mentions?: string[];                  // user_id[] of @mentioned users
   edited?: string;                      // ISO timestamp if edited
   embeds?: Embed[];
 };
@@ -976,4 +977,72 @@ await fetch(`https://chat.chemistryml.com/channels/${channelId}/messages`, {
 
 ### Unread tracking
 The `ChannelAck` WS event is the signal that a channel has been read. Compare the acked `message_id` against the last known message in that channel to determine whether a channel still has unread messages. On initial load, `GET /users/@me` returns `unreads[]` with `{ channel: id, last_id: id }`.
+
+---
+
+## Notifications
+
+### Mention detection
+The `Message` WebSocket event includes a `mentions` field — an array of user IDs that were @mentioned in the message. There is **no** separate WS event for mentions; clients check client-side:
+
+```typescript
+const isMentioned = (msg.mentions ?? []).includes(currentUserId);
+```
+
+DMs are not distinguish by event type — they arrive as a standard `Message` event. Detect them by checking the channel's `channel_type === 'DirectMessage'`.
+
+### Browser Notification API pattern
+Request permission once at component mount. Only fire a notification when `document.hidden` (tab is backgrounded) to avoid noise while the user is actively using the app:
+
+```typescript
+// Request permission on mount (inside useVisibleTask$)
+if ('Notification' in window && Notification.permission === 'default') {
+  Notification.requestPermission();
+}
+
+// In WS Message handler:
+if (msg.author !== currentUserId && document.hidden) {
+  const senderName = userNames[msg.author] ?? 'Someone';
+  const body = msg.content?.slice(0, 100)
+    ?? (msg.attachments?.length ? '📎 Sent an attachment' : '…');
+
+  if (Notification.permission === 'granted') {
+    const n = new Notification(senderName, {
+      body,
+      icon: userAvatars[msg.author],
+      tag: msg.channel,   // collapse multiple messages from same channel into one notification
+    });
+    n.onclick = () => window.focus();
+  }
+}
+```
+
+> **Note:** `tag` deduplicates notifications from the same channel — the OS replaces the previous notification from that tag instead of stacking them.
+
+### Document title ticker
+When the tab is hidden and a new message arrives, scroll the document title to attract the user's attention:
+
+```typescript
+// State: notifTitle = useSignal('');
+
+// Set in WS Message handler when document.hidden:
+notifTitle.value = isDM
+  ? `new message from ${senderName}`
+  : `new message in ${serverName}`;
+
+// Clear when tab becomes visible again:
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) notifTitle.value = '';
+});
+
+// Animate the title (inside a useVisibleTask$ that tracks notifTitle):
+const full = `🔴 ${notifTitle}        `; // trailing spaces act as separator before wrap
+let pos = 0;
+const id = setInterval(() => {
+  document.title = full.slice(pos) + full.slice(0, pos);
+  pos = (pos + 1) % full.length;
+}, 175); // ~175 ms per character
+```
+
+The rotation string is built once per notification; `pos` advances each tick to create the scrolling marquee effect. The trailing spaces give a visual pause before the text wraps around.
 

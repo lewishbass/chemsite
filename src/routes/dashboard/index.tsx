@@ -9,6 +9,18 @@ import './dashboard.css';
 type Tab = 'db' | 'cmd' | 'stats';
 const VALID_TABS: readonly Tab[] = ['db', 'cmd', 'stats'];
 
+import { DocumentHead } from '@builder.io/qwik-city';
+
+export const head: DocumentHead = {
+    title: 'Labby : Dash',
+    meta: [
+        {
+            name: 'description',
+            content: 'Control equipment and view data',
+        },
+    ],
+};
+
 export default component$(() => {
     const loc = useLocation();
     const nav = useNavigate();

@@ -4,7 +4,17 @@ import { useSignIn, useSession, useSignOut } from '~/routes/plugin@auth';
 import { StoatChat, type StoatChatState } from '~/components/stoat-chat/stoat-chat';
 import { acceptFriendRequest, uploadFile, editUserProfile, fetchUserBanner, avatarUrl } from '~/components/stoat-chat/stoat_scripts';
 import './chat.css';
+import { DocumentHead } from '@builder.io/qwik-city';
 
+export const head: DocumentHead = {
+  title: 'Labby : Chat',
+  meta: [
+    {
+      name: 'description',
+      content: 'Join and participate in discussion servers',
+    },
+  ],
+};
 // Add invite codes for private servers here (leave empty if none)
 const PENDING_INVITE_CODES: string[] = [];
 

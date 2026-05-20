@@ -15,6 +15,17 @@ import { ExplorationGraph } from './graphs/ml/exploration';
 import { AgentsGraph } from './graphs/ml/agents';
 import { DynamicGraphDemo } from '~/components/graphs/dynamic-graph-demo/dynamic-graph-demo';
 import { DynamicGraphDemo2 } from '~/components/graphs/dynamic-graph-demo-2/dynamic-graph-demo-2';
+import { DocumentHead } from '@builder.io/qwik-city';
+
+export const head: DocumentHead = {
+  title: 'Labby',
+  meta: [
+    {
+      name: 'description',
+      content: 'Explore the chemical data ecosystem through interactive graphs. Understand how data flows from experiments to machine learning and back, and discover the tools that power modern chemistry.',
+    },
+  ],
+};
 
 export default component$(() => {
   const activeDbCategory = useSignal('Data Flow');
@@ -177,7 +188,7 @@ export default component$(() => {
         <div class="section-padding dash-right" />
       </section>
       <section class="relative section-container flex flex-row">
-        <div class="section-padding dash-left" />
+        <div class="section-padding dash-left" ><div class="absolute inset-[2px] z-20 bg-gradient-to-b from-transparent to-(--color-surface) pointer-events-none" /></div>
         <div class="flex flex-col w-[var(--inner-width)] max-w-[100vw] relative dash-right dash-left">
           <div class="grid grid-cols-3 divide-x divide-edge py-6 das">
             <div class="px-10">
@@ -203,7 +214,7 @@ export default component$(() => {
             </p>
           </div>
         </div>
-        <div class="section-padding dash-right" />
+        <div class="section-padding dash-right" ><div class="absolute inset-[2px] z-20 bg-gradient-to-b from-transparent to-(--color-surface) pointer-events-none" /></div>
       </section>
 
       {/* ── ML Section ──────────────────────────────── */}

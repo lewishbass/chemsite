@@ -64,6 +64,7 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
   const isDragOver = useSignal(false);
   const mainPanelRef = useSignal<Element>();
   const newMsgCount = useSignal(0); // incremented only when a new message arrives; drives auto-scroll
+  const notifTitle = useSignal(''); // drives document title ticker; cleared when tab regains focus
 
   const input_style = "w-full rounded-lg px-6 py-2 active:outline-none focus:ring-none focus:outline-none focus:bg-(--color-canvas)/50 transition-colors duration-300 text-(--color-ink)";
 
@@ -162,6 +163,30 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
         } else {
           // Mark background channel as having unread messages
           unreadChannels[msg.channel] = true;
+        }
+        // Title ticker + browser notification when the tab is hidden
+        if (msg.author !== chatState.currentUserId && document.hidden) {
+          const senderName = chatState.userNames[msg.author] ?? 'Someone';
+          const ch = channels.value.find(c => c._id === msg.channel);
+          const isDM = ch?.channel_type === 'DirectMessage';
+          const svName = !isDM && ch?.server
+            ? (servers.value.find(s => s._id === ch!.server)?.name ?? ch?.name)
+            : null;
+          notifTitle.value = isDM
+            ? `new message from ${senderName}`
+            : `new message in ${svName ?? ch?.name ?? 'chat'}`;
+          if ('Notification' in window && Notification.permission === 'granted') {
+            const body = msg.content?.slice(0, 100)
+              ?? (msg.attachments?.length ? '📎 Sent an attachment' : '…');
+            try {
+              const n = new Notification(senderName, {
+                body,
+                icon: chatState.userAvatars[msg.author] ?? undefined,
+                tag: msg.channel, // collapse multiple messages from the same channel
+              });
+              n.onclick = () => window.focus();
+            } catch { /* unsupported context (e.g. Firefox private mode) */ }
+          }
         }
 
       } else if (evt.type === 'ChannelStartTyping') {
@@ -359,6 +384,43 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
       chatState.userAvatars = avs;
     }
     members.value = fetchedMembers;
+  });
+
+  // Request notification permission; restore title and clear ticker when the tab regains focus
+  // eslint-disable-next-line qwik/no-use-visible-task
+  useVisibleTask$(({ cleanup }) => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => { /* permission denied */ });
+    }
+    const originalTitle = document.title;
+    const clearNotif = () => {
+      if (!document.hidden) {
+        notifTitle.value = '';
+        document.title = originalTitle;
+      }
+    };
+    document.addEventListener('visibilitychange', clearNotif);
+    window.addEventListener('focus', clearNotif);
+    cleanup(() => {
+      document.removeEventListener('visibilitychange', clearNotif);
+      window.removeEventListener('focus', clearNotif);
+      document.title = originalTitle;
+    });
+  });
+
+  // Scroll document title ticker while there is an unread notification
+  // eslint-disable-next-line qwik/no-use-visible-task
+  useVisibleTask$(({ track, cleanup }) => {
+    const title = track(() => notifTitle.value);
+    if (!title) return;
+    // Build the scrolling string: "🔴 new message in Lab        " and rotate it
+    const full = `${title}        `;
+    let pos = 0;
+    const id = setInterval(() => {
+      document.title = "🔴" + full.slice(pos) + full.slice(0, pos);
+      pos = (pos + 1) % full.length;
+    }, 50);
+    cleanup(() => clearInterval(id));
   });
 
   // Native drag counter for reliable drag-over visual feedback
@@ -584,13 +646,15 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
             {/* Message list */}
             <div
               ref={msgsEl}
-              class="flex-1 overflow-y-auto mini-scroll p-4 flex flex-col gap-3"
+              class="flex-1 overflow-y-auto mini-scroll p-4 flex flex-col gap-2"
             >
               {messages.value.length === 0 && (
                 <p class="text-muted text-sm italic">No messages yet.</p>
               )}
-              {messages.value.map((msg) => (
-                <div key={msg._id} class="group/msg relative hover:bg-(--color-edge)/10 rounded-md px-1 -mx-1 pt-0.5">
+              {messages.value.map((msg, idx) => {
+                const isGrouped = idx > 0 && messages.value[idx - 1].author === msg.author;
+                return (
+                  <div key={msg._id} class={`group/msg relative hover:bg-(--color-edge)/10 rounded-md px-1 -mx-1 pt-0.5 ${isGrouped ? '-mt-3' : ''}`}>
 
                   {/* Hover action toolbar */}
                   <div class="absolute right-1 -top-3 hidden group-hover/msg:flex items-center gap-0.5 bg-(--color-surface) border border-(--color-rim) rounded-lg px-1.5 py-1 shadow-md z-20">
@@ -657,10 +721,12 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
                     </div>
                   )}
 
-                  {/* Author */}
-                  <p class="text-xs font-semibold text-(--color-accent-muted) mb-0.5">
-                    {chatState.userNames[msg.author] ?? msg.author}
-                  </p>
+                    {/* Author — hidden for consecutive messages from the same person */}
+                    {!isGrouped && (
+                      <p class="text-xs font-semibold text-(--color-accent-muted) mb-0.5">
+                        {chatState.userNames[msg.author] ?? msg.author}
+                      </p>
+                    )}
 
                   {/* Content — edit mode or normal */}
                   {editingMsgId.value === msg._id ? (
@@ -763,7 +829,8 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
             
 
