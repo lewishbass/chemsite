@@ -1,7 +1,7 @@
 import { component$, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
 import { LuClock, LuPaperclip, LuPencil, LuReply, LuSmile, LuTrash2, LuUpload, LuUser, LuUserCheck, LuUserPlus, LuX } from '@qwikest/icons/lucide';
 import {
-  STOAT_BASE, STOAT_WS, STOAT_AUTUMN, avatarUrl, ackChannel, parseContent,
+  STOAT_WS, STOAT_AUTUMN, avatarUrl, ackChannel, parseContent,
   type StoatMsg, type StoatChannel, type StoatServer, type StoatMember, type StoatEmoji,
   type WsReady, type WsMessage, type WsMessageUpdate, type WsMessageDelete,
   type WsMessageReact, type WsMessageUnreact,

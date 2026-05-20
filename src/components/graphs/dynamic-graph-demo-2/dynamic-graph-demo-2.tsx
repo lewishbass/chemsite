@@ -13,7 +13,7 @@ const FRICTION  = 0.025;    // velocity decays toward SLOW_SPIN each frame
 const SLICE_DATA = [0.08, 0.12, 0.26, 0.14, 0.10, 0.20, 0.10];
 const SLICE_LABELS = ['HPLC', 'MS', 'NMR', 'UV-Vis', 'IR', 'Other', 'Manual'];
 const RADIAL_DATA =
-Array.from({length: 5}, (_, j) =>
+  Array.from({ length: 5 }, () =>
     Array.from({ length: 20 }, (_, i) =>
     (Math.random() * 0.5 + 0.5) * (Math.sin(i/20 * Math.PI * 2)+1.5) * 0.35  , // random radial "bumpiness" for each slice
 ));
@@ -192,7 +192,7 @@ export const DynamicGraphDemo2 = component$(() => {
       // ── Bottom indicator ────────────────────────────────────────
       // Find which slice is currently at the absolute bottom (angle π/2)
       const bottomInLocal = Math.PI / 2 - totalAngle;
-      let normAngle = ((bottomInLocal - (-Math.PI / 2)) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+      const normAngle = ((bottomInLocal - (-Math.PI / 2)) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
       let bottomIdx = 6;
       let cumAngleFinder = 0;
       for (let j = 0; j < 7; j++) {

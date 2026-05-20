@@ -1,5 +1,5 @@
 import { component$, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
-import { LuAreaChart, LuArrowLeftRight, LuCamera, LuCheck, LuEye, LuEyeOff, LuFactory, LuFlaskConical, LuImage, LuListTodo, LuLock, LuMessageSquareDashed, LuMicroscope, LuOrbit, LuPencil, LuScaling, LuServer, LuSparkles, LuStickyNote, LuUser, LuX } from '@qwikest/icons/lucide';
+import { LuCamera, LuCheck, LuEye, LuEyeOff, LuFlaskConical, LuImage, LuLock, LuPencil, LuOrbit, LuServer, LuSparkles, LuUser, LuX } from '@qwikest/icons/lucide';
 import { useSignIn, useSession, useSignOut } from '~/routes/plugin@auth';
 import { StoatChat, type StoatChatState } from '~/components/stoat-chat/stoat-chat';
 import { acceptFriendRequest, uploadFile, editUserProfile, fetchUserBanner, avatarUrl } from '~/components/stoat-chat/stoat_scripts';
@@ -123,7 +123,7 @@ export default component$(() => {
       title: 'General Chemistry',
       description: 'General chat for all topics.',
       real: true,
-      code:'https://chat.chemistryml.com/invite/TArGFQbJ'
+      code: 'https://chat.chemistryml.com/invite/TArGFQbJ'
     },
     {
       icon: LuSparkles,
@@ -243,7 +243,7 @@ export default component$(() => {
               <h2 class="text-ink text-center">Your Profile</h2>
 
               {/* Profile card */}
-              <div class="relative rounded-2xl overflow-hidden w-full max-w-lg" style={{minHeight: '130px'}}>
+              <div class="relative rounded-2xl overflow-hidden w-full max-w-lg" style={{ minHeight: '130px' }}>
                 {/* Banner background */}
                 {stoatUser.value?.banner_url ? (
                   <>
@@ -539,54 +539,54 @@ export default component$(() => {
                   const inviteCode = (room.real && room.code) ? room.code.split('/').pop() ?? '' : '';
                   const roomTitle = room.title;
                   return (
-                  <div
-                    key={roomTitle}
-                    class="p-1 border-dashed border-[var(--color-rim)] border-b last:border-b-0 lg:border-r lg:[&:nth-child(3n)]:border-r-0 lg:[&:nth-last-child(-n+3)]:border-b-0"
-                  >
-                    {inviteCode ? (
-                      <button
-                        class="p-2 w-full h-full flex items-start gap-4 cursor-pointer hover:bg-(--color-edge) transition-colors rounded-md text-left"
-                        onClick$={async () => {
-                          const tok = session.value?.user?.stoat_token;
-                          if (!tok || !inviteCode) return;
-                          try {
-                            const r = await fetch(`https://chat.chemistryml.com/api/invites/${inviteCode}`, {
-                              method: 'POST',
-                              headers: { 'x-session-token': tok },
-                            });
-                            if (r.ok) {
-                              const data = await r.json();
-                              const sid: string = data.server?._id ?? '';
-                              const sname: string = data.server?.name ?? roomTitle;
-                              if (sid && !chatState.joinedServers.some((s) => s._id === sid)) {
-                                chatState.joinedServers.push({ _id: sid, name: sname, icon: data.server?.icon ?? null, banner: data.server?.banner ?? null });
+                    <div
+                      key={roomTitle}
+                      class="p-1 border-dashed border-[var(--color-rim)] border-b last:border-b-0 lg:border-r lg:[&:nth-child(3n)]:border-r-0 lg:[&:nth-last-child(-n+3)]:border-b-0"
+                    >
+                      {inviteCode ? (
+                        <button
+                          class="p-2 w-full h-full flex items-start gap-4 cursor-pointer hover:bg-(--color-edge) transition-colors rounded-md text-left"
+                          onClick$={async () => {
+                            const tok = session.value?.user?.stoat_token;
+                            if (!tok || !inviteCode) return;
+                            try {
+                              const r = await fetch(`https://chat.chemistryml.com/api/invites/${inviteCode}`, {
+                                method: 'POST',
+                                headers: { 'x-session-token': tok },
+                              });
+                              if (r.ok) {
+                                const data = await r.json();
+                                const sid: string = data.server?._id ?? '';
+                                const sname: string = data.server?.name ?? roomTitle;
+                                if (sid && !chatState.joinedServers.some((s) => s._id === sid)) {
+                                  chatState.joinedServers.push({ _id: sid, name: sname, icon: data.server?.icon ?? null, banner: data.server?.banner ?? null });
+                                }
+                                if (sid) chatState.activeServerId = sid;
+                                document.getElementById('stoat-chat-section')?.scrollIntoView({ behavior: 'smooth' });
                               }
-                              if (sid) chatState.activeServerId = sid;
-                              document.getElementById('stoat-chat-section')?.scrollIntoView({ behavior: 'smooth' });
-                            }
-                          } catch { /* ignore */ }
-                        }}
-                      >
-                        <div class="shrink-0 rounded-md border border-[var(--color-rim)] bg-[var(--color-surface)] p-1.5 text-ink">
-                          <room.icon class="h-8 w-8" />
+                            } catch { /* ignore */ }
+                          }}
+                        >
+                          <div class="shrink-0 rounded-md border border-[var(--color-rim)] bg-[var(--color-surface)] p-1.5 text-ink">
+                            <room.icon class="h-8 w-8" />
+                          </div>
+                          <div>
+                            <p class="text-ink font-medium leading-tight">{roomTitle}</p>
+                            <p class="text-muted text-xs mt-1">{room.description}</p>
+                          </div>
+                        </button>
+                      ) : (
+                        <div class="p-2 w-full h-full flex items-start gap-4 opacity-50">
+                          <div class="shrink-0 rounded-md border border-[var(--color-rim)] bg-[var(--color-surface)] p-1.5 text-ink">
+                            <room.icon class="h-8 w-8" />
+                          </div>
+                          <div>
+                            <p class="text-ink font-medium leading-tight">{roomTitle}</p>
+                            <p class="text-muted text-xs mt-1">{room.description}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p class="text-ink font-medium leading-tight">{roomTitle}</p>
-                          <p class="text-muted text-xs mt-1">{room.description}</p>
-                        </div>
-                      </button>
-                    ) : (
-                      <div class="p-2 w-full h-full flex items-start gap-4 opacity-50">
-                        <div class="shrink-0 rounded-md border border-[var(--color-rim)] bg-[var(--color-surface)] p-1.5 text-ink">
-                          <room.icon class="h-8 w-8" />
-                        </div>
-                        <div>
-                          <p class="text-ink font-medium leading-tight">{roomTitle}</p>
-                          <p class="text-muted text-xs mt-1">{room.description}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -614,7 +614,7 @@ export default component$(() => {
                   <div class="mb-8 text-center">
                     <h3 class="text-ink mb-3">Private Servers</h3>
                     <p class="text-muted max-w-2xl mx-auto">
-                      Your servers. Invited servers appear dimmed — click to accept and join.
+                      Your servers. Invited servers appear dimmed - click to accept and join.
                     </p>
                   </div>
 
@@ -630,39 +630,39 @@ export default component$(() => {
                         const svBannerUrl = avatarUrl(sv.banner ?? null);
                         const svId = sv._id;
                         return (
-                        <div
-                          key={sv._id}
-                          class="p-1 border-dashed border-[var(--color-rim)] border-b last:border-b-0 lg:border-r lg:[&:nth-child(3n)]:border-r-0 lg:[&:nth-last-child(-n+3)]:border-b-0"
-                        >
-                          <button
-                            class="w-full h-full cursor-pointer rounded-md text-left overflow-hidden relative group/sv"
-                            style={{minHeight: '72px'}}
-                            onClick$={() => {
-                              chatState.activeServerId = svId;
-                              document.getElementById('stoat-chat-section')?.scrollIntoView({ behavior: 'smooth' });
-                            }}
+                          <div
+                            key={sv._id}
+                            class="p-1 border-dashed border-[var(--color-rim)] border-b last:border-b-0 lg:border-r lg:[&:nth-child(3n)]:border-r-0 lg:[&:nth-last-child(-n+3)]:border-b-0"
                           >
-                            {svBannerUrl ? (
-                              <>
-                                <div class="absolute inset-0" style={`background: url('${svBannerUrl}') center/cover no-repeat`} />
-                                <div class="absolute inset-0 bg-gradient-to-r from-black/65 to-black/30" />
-                              </>
-                            ) : (
-                              <div class="absolute inset-0 group-hover/sv:bg-(--color-edge) transition-colors rounded-md" />
-                            )}
-                            <div class="relative z-10 flex items-center gap-4 p-3">
-                              <div class="shrink-0 rounded-md border border-[var(--color-rim)] bg-[var(--color-surface)] overflow-hidden w-[44px] h-[44px] flex items-center justify-center text-ink">
-                                {sv.icon
-                                  ? <img src={`https://chat.chemistryml.com/autumn/${sv.icon.tag}/${sv.icon._id}`} alt={sv.name} class="w-full h-full object-cover" />
-                                  : <LuServer class="h-8 w-8" />}
+                            <button
+                              class="w-full h-full cursor-pointer rounded-md text-left overflow-hidden relative group/sv"
+                              style={{ minHeight: '72px' }}
+                              onClick$={() => {
+                                chatState.activeServerId = svId;
+                                document.getElementById('stoat-chat-section')?.scrollIntoView({ behavior: 'smooth' });
+                              }}
+                            >
+                              {svBannerUrl ? (
+                                <>
+                                  <div class="absolute inset-0" style={`background: url('${svBannerUrl}') center/cover no-repeat`} />
+                                  <div class="absolute inset-0 bg-gradient-to-r from-black/65 to-black/30" />
+                                </>
+                              ) : (
+                                <div class="absolute inset-0 group-hover/sv:bg-(--color-edge) transition-colors rounded-md" />
+                              )}
+                              <div class="relative z-10 flex items-center gap-4 p-3">
+                                <div class="shrink-0 rounded-md border border-[var(--color-rim)] bg-[var(--color-surface)] overflow-hidden w-[44px] h-[44px] flex items-center justify-center text-ink">
+                                  {sv.icon
+                                    ? <img src={`https://chat.chemistryml.com/autumn/${sv.icon.tag}/${sv.icon._id}`} alt={sv.name} class="w-full h-full object-cover" />
+                                    : <LuServer class="h-8 w-8" />}
+                                </div>
+                                <div>
+                                  <p class={`font-medium leading-tight ${svBannerUrl ? 'text-white' : 'text-ink'}`}>{sv.name}</p>
+                                  <p class={`text-xs mt-1 ${svBannerUrl ? 'text-white/60' : 'text-muted'}`}>Click to open</p>
+                                </div>
                               </div>
-                              <div>
-                                <p class={`font-medium leading-tight ${svBannerUrl ? 'text-white' : 'text-ink'}`}>{sv.name}</p>
-                                <p class={`text-xs mt-1 ${svBannerUrl ? 'text-white/60' : 'text-muted'}`}>Click to open</p>
-                              </div>
-                            </div>
-                          </button>
-                        </div>
+                            </button>
+                          </div>
                         );
                       })}
 
@@ -762,7 +762,7 @@ export default component$(() => {
                       )}
                       {/* Friends grid */}
                       {chatState.relations.filter(r => r.status === 'Friend').length === 0 &&
-                       chatState.relations.filter(r => r.status === 'Incoming').length === 0 ? (
+                          chatState.relations.filter(r => r.status === 'Incoming').length === 0 ? (
                         <p class="text-muted text-sm text-center italic py-4">No friends yet — join a server and use the members sidebar to add people.</p>
                       ) : (
                         <div class="grid grid-cols-1 lg:grid-cols-3 w-full">
@@ -770,7 +770,7 @@ export default component$(() => {
                             <div key={rel._id} class="p-1">
                               <button
                                 class="w-full h-full cursor-pointer rounded-md text-left overflow-hidden relative group/dm"
-                                style={{minHeight: '72px'}}
+                                style={{ minHeight: '72px' }}
                                 onClick$={() => {
                                   chatState.activeDmUserId = rel._id;
                                   chatState.activeDmSeq = (chatState.activeDmSeq ?? 0) + 1;

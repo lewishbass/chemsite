@@ -1,8 +1,8 @@
-import { component$, createContextId, Slot, useContext, useContextProvider, useVisibleTask$, type Signal } from '@builder.io/qwik';
+import { component$, createContextId, Slot, useContext, useContextProvider, type Signal } from '@builder.io/qwik';
 
 export const ActiveSectionCtx = createContextId<Signal<string>>('fading-display.active');
 
-export const FadingDisplay = component$(({ active_id, autoscroll_time = -1 }: { active_id: Signal<string>, autoscroll_time?: number }) => {
+export const FadingDisplay = component$(({ active_id, }: { active_id: Signal<string> }) => {
   useContextProvider(ActiveSectionCtx, active_id);
 
   return (

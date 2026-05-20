@@ -28,8 +28,7 @@ const STEP = (CR - CL) / 7;
 const BW = 48, BAR_RX = 4;
 
 const f   = (n: number) => n.toFixed(2);
-const pX  = (i: number) => CL + i * STEP;
-const bTY = (i: number) => CB - BAR_DATA[i]  * CH;  // bar top y (static base)
+const pX = (i: number) => CL + i * STEP;
 const lTY = (i: number) => CB - LINE_DATA[i] * CH;  // dot base y
 
 // Bar oscillation
