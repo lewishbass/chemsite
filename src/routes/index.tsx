@@ -15,6 +15,7 @@ import { ExplorationGraph } from './graphs/ml/exploration';
 import { AgentsGraph } from './graphs/ml/agents';
 import { DynamicGraphDemo } from '~/components/graphs/dynamic-graph-demo/dynamic-graph-demo';
 import { DynamicGraphDemo2 } from '~/components/graphs/dynamic-graph-demo-2/dynamic-graph-demo-2';
+import { MofViewer } from '~/components/mof-viewer/mof-viewer';
 import { DocumentHead } from '@builder.io/qwik-city';
 
 export const head: DocumentHead = {
@@ -207,11 +208,24 @@ export default component$(() => {
               <p class="text-xs text-muted mt-1 tracking-widest uppercase">Rates and Results</p>
             </div>
           </div>
-          <div class="relative w-full p-16">
-            <h2 class="text-ink text-center mb-6">Put Molecule model here</h2>
-            <p class="text-muted font-semibold text-lg max-w-2xl mx-auto text-center">
-              <ScrollThrough word_list={['add', 'more', 'blurbs']} /> static blurb.
+          <div class="relative w-full p-16 overflow-hidden">
+            <h2 class="text-ink text-center mb-6 relative z-10 pointer-events-none">Visualize Structures</h2>
+            <p class="text-muted font-semibold text-lg max-w-2xl mx-auto text-center relative z-10 pointer-events-none">
+              Interactive 3-D crystal structure of a metal–organic framework
             </p>
+            <div class="h-100 w-full" />
+          </div>
+
+          <div class="absolute inset-0">
+            <MofViewer cifPaths={[
+              "/cool_mofs/zusfus_P1.cif",
+              "/cool_mofs/gustun01_P1.cif",
+              "/cool_mofs/lupvoj_P1_charged.cif",
+              "/cool_mofs/pasmut_P1.cif",
+              "/cool_mofs/ponjub_P1_charged_H.cif",
+              "/cool_mofs/yujges_P1_charged_H.cif",
+              "/cool_mofs/zewhoc_P1_charged.cif",
+            ]} />
           </div>
         </div>
         <div class="section-padding dash-right" ><div class="absolute inset-[2px] z-20 bg-gradient-to-b from-transparent to-(--color-surface) pointer-events-none" /></div>
