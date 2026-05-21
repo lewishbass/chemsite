@@ -172,8 +172,8 @@ export const MofViewer = component$<{ cifPaths: string[] }>(({ cifPaths }) => {
     let molScale = 1;
 
     // Camera state
-    let camX = 0;
-    let camY = 0;
+    const camX = -60;
+    const camY = 0;
     let camDist = CAM_DIST;
 
     // Rotation / animation
@@ -390,7 +390,7 @@ export const MofViewer = component$<{ cifPaths: string[] }>(({ cifPaths }) => {
         if (vz <= 10) return null;
         const s = FOV / vz;
         return {
-          sx: (wx - camX) * s + W * 0.65,
+          sx: (wx - camX) * s + W * 0.5,
           sy: -(wy - camY) * s + H * 0.5,
           vz, s,
         };
