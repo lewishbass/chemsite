@@ -1,5 +1,5 @@
 import { component$, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
-import { LuClock, LuPaperclip, LuPencil, LuReply, LuSmile, LuTrash2, LuUpload, LuUser, LuUserCheck, LuUserPlus, LuX } from '@qwikest/icons/lucide';
+import { LuChevronLeft, LuClock, LuPaperclip, LuPencil, LuReply, LuSmile, LuTrash2, LuUpload, LuUser, LuUserCheck, LuUserPlus, LuX } from '@qwikest/icons/lucide';
 import {
   STOAT_WS, STOAT_AUTUMN, avatarUrl, ackChannel, parseContent,
   type StoatMsg, type StoatChannel, type StoatServer, type StoatMember, type StoatEmoji,
@@ -65,6 +65,9 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
   const mainPanelRef = useSignal<Element>();
   const newMsgCount = useSignal(0); // incremented only when a new message arrives; drives auto-scroll
   const notifTitle = useSignal(''); // drives document title ticker; cleared when tab regains focus
+  const leftOpen = useSignal(true);
+  const rightOpen = useSignal(true);
+  const outerRef = useSignal<Element>();
 
   const input_style = "w-full rounded-lg px-6 py-2 active:outline-none focus:ring-none focus:outline-none focus:bg-(--color-canvas)/50 transition-colors duration-300 text-(--color-ink)";
 
@@ -128,10 +131,10 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
         servers.value = ready.servers ?? [];
         channels.value = ready.channels ?? [];
 
-        // Auto-select the first text channel
-        const first = (ready.channels ?? []).find(
-          (c) => c.channel_type === 'TextChannel'
-        );
+        // Auto-select: try saved channel first, then fall back to first text channel
+        const savedChannelId = typeof localStorage !== 'undefined' ? localStorage.getItem('stoat-activeChannelId') : null;
+        const allChannels = ready.channels ?? [];
+        const first = (savedChannelId ? (allChannels.find(c => c._id === savedChannelId) ?? allChannels.find(c => c.channel_type === 'TextChannel')) : allChannels.find(c => c.channel_type === 'TextChannel'));
         if (first) {
           activeId.value = first._id;
           activeName.value = first.name ?? '';
@@ -281,9 +284,26 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
     const currentStatus = track(() => status.value);
     if (!serverId || currentStatus !== 'ready') return;
 
-    const ch = channels.value.find(
+    // Try to find an already-loaded channel for this server.
+    // If not found, the server may have just been joined — fetch its channels now
+    // rather than waiting for the joinedServers sync task (registered later).
+    let ch = channels.value.find(
       (c) => c.server === serverId && c.channel_type === 'TextChannel'
     );
+    if (!ch) {
+      if (!servers.value.some(s => s._id === serverId)) {
+        const sv = chatState.joinedServers.find(s => s._id === serverId);
+        if (sv) servers.value = [...servers.value, sv];
+      }
+      const newChs = await fetchServerChannels(serverId, token);
+      if (newChs.length) {
+        channels.value = [
+          ...channels.value,
+          ...newChs.filter(c => !channels.value.some(e => e._id === c._id)),
+        ];
+        ch = newChs.find(c => c.channel_type === 'TextChannel');
+      }
+    }
     if (!ch || ch._id === activeId.value) return;
 
     activeId.value = ch._id;
@@ -423,6 +443,30 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
     cleanup(() => clearInterval(id));
   });
 
+  // Save active channel to localStorage
+  // eslint-disable-next-line qwik/no-use-visible-task
+  useVisibleTask$(({ track }) => {
+    const id = track(() => activeId.value);
+    if (id) localStorage.setItem('stoat-activeChannelId', id);
+  });
+
+  // Collapse sidebars when component is narrower than 700px
+  // eslint-disable-next-line qwik/no-use-visible-task
+  useVisibleTask$(({ track, cleanup }) => {
+    const el = track(() => outerRef.value);
+    if (!el) return;
+    const check = () => {
+      if (el.clientWidth < 700) {
+        leftOpen.value = false;
+        rightOpen.value = false;
+      }
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    cleanup(() => ro.disconnect());
+  });
+
   // Native drag counter for reliable drag-over visual feedback
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(({ track, cleanup }) => {
@@ -445,10 +489,30 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div class="flex h-[820px]  overflow-hidden bg-(--color-surface) rounded-lg">
+    <div ref={outerRef} class="relative flex h-[90vh] overflow-hidden bg-(--color-surface) rounded-lg">
+
+      {/* ── Left sidebar toggle ── */}
+      <button
+        class="absolute top-2.75 left-30 z-40 p-1 rounded hover:bg-(--color-canvas) text-muted hover:text-ink cursor-pointer transition-colors duration-200"
+        onClick$={() => { leftOpen.value = !leftOpen.value; }}
+        title={leftOpen.value ? 'Collapse sidebar' : 'Expand sidebar'}
+      >
+        <LuChevronLeft class={`h-4 w-4${leftOpen.value ? '' : ' rotate-180'}`} />
+      </button>
+
+      {/* ── Right sidebar toggle ── */}
+      {status.value === 'ready' && membersServerId.value && (
+        <button
+          class="absolute top-2.75 right-2 z-40 p-1 rounded hover:bg-(--color-canvas) text-muted hover:text-ink cursor-pointer transition-colors duration-200"
+          onClick$={() => { rightOpen.value = !rightOpen.value; }}
+          title={rightOpen.value ? 'Collapse members' : 'Expand members'}
+        >
+          <LuChevronLeft class={`h-4 w-4${!rightOpen.value ? '' : ' rotate-180'}`} />
+        </button>
+      )}
 
       {/* ── Sidebar: server + channel list ── */}
-      <aside class="w-[150px] shrink-0 border-r border-(--color-rim) overflow-y-auto py-2">
+      {leftOpen.value && <aside class="w-[150px] shrink-0 border-r border-(--color-rim) overflow-y-auto py-2">
         {status.value === 'connecting' && (
           <p class="px-3 py-2 text-xs text-muted italic">Connecting…</p>
         )}
@@ -588,7 +652,7 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
             ))}
           </div>
         )}
-      </aside>
+      </aside>}
 
       {/* ── Main panel ── */}
       <div
@@ -985,7 +1049,7 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
       </div>
 
       {/* Right sidebar: server members */}
-      {status.value === 'ready' && membersServerId.value && (
+      {status.value === 'ready' && membersServerId.value && rightOpen.value && (
         <aside class="w-44 shrink-0 border-l border-(--color-rim) overflow-y-auto py-2">
           <p class="px-3 pt-2 pb-3 text-[10px] font-bold uppercase tracking-widest text-muted">
             Members — {members.value.length}

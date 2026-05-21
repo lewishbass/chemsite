@@ -42,8 +42,8 @@
 
 @media (max-width: 480px) {
   :root {
-    --outer-width: 300px;
-    --inner-width: 250px;
+    --outer-width: 100%;
+    --inner-width: calc(100% - 4rem);
   }
 }
 

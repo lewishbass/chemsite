@@ -422,9 +422,9 @@ export default component$(() => {
               </p>
             </div>
           ) : (
-            <div class="relative dash-left dash-right w-full p-8">
-              <h2 class="text-ink text-center mb-6">Sign In / Sign Up</h2>
-              <p class="text-muted font-semibold text-lg max-w-2xl mx-auto px-2 md:px-16">
+              <div class="relative dash-left dash-right w-full p-0 sm:p-8 ">
+                <h2 class="text-ink text-center mb-6 max-sm:pt-4">Sign In / Sign Up</h2>
+                <p class="text-muted font-semibold text-lg max-w-2xl mx-auto px-4 md:px-16">
                 Sign in to participate in the community chat, share insights, and collaborate.
               </p>
               <div class="flex md:flex-row flex-col pt-8">
@@ -449,7 +449,7 @@ export default component$(() => {
                       signInError.value = "An unexpected error occurred.";
                     }
                   }}
-                  class="md:w-1/2 max-md:border-b max-md:mb-4 md:border-r border-edge px-8 flex flex-col"
+                    class="md:w-1/2 max-md:border-b max-md:mb-4 md:border-r border-edge flex flex-col px-8 max-md:px-4"
                 >
                   <h3 class="text-ink text-xl mb-4 w-full text-center">Sign In</h3>
                   <table class="w-full text-left">
@@ -462,7 +462,7 @@ export default component$(() => {
                         <td><label for="password">Password</label></td>
                         <td class="relative">
                           <input type={showSignInPassword.value ? "text" : "password"} id="password" name="password" class={input_style + " pr-10"} placeholder="Password" required />
-                          <button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-ink" onClick$={() => showSignInPassword.value = !showSignInPassword.value}>
+                            <button tabIndex={-1} type="button" class="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-ink" onClick$={() => showSignInPassword.value = !showSignInPassword.value}>
                             {showSignInPassword.value ? <LuEyeOff class="h-4 w-4" /> : <LuEye class="h-4 w-4" />}
                           </button>
                         </td>
@@ -545,7 +545,7 @@ export default component$(() => {
                         <td><label for="reg-password">Password</label></td>
                         <td class="relative">
                           <input type={showRegPassword.value ? "text" : "password"} id="reg-password" name="reg-password" class={input_style + " pr-10"} placeholder="Password" required onInput$={(_, el) => regPassword.value = el.value} />
-                          <button type="button" class="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-ink" onClick$={() => showRegPassword.value = !showRegPassword.value}>
+                            <button tabIndex={-1} type="button" class="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-ink" onClick$={() => showRegPassword.value = !showRegPassword.value}>
                             {showRegPassword.value ? <LuEyeOff class="h-4 w-4" /> : <LuEye class="h-4 w-4" />}
                           </button>
                         </td>
@@ -569,7 +569,7 @@ export default component$(() => {
                   <button type="submit" class="btn-pill mb-4 mt-2 mx-auto">Register</button>
                 </form>
               </div>
-              <p class="text-muted font-semibold text-lg max-w-2xl mx-auto px-2 md:px-16">
+                <p class="text-muted font-semibold text-lg max-w-2xl mx-auto px-4 md:px-16 mb-4 sm:pb-0">
                 This chat feature is implemented using a self-hosted <a class="text-(--color-accent) font-bold" href="https://stoat.chat" target="_blank" rel="noopener noreferrer">stoat</a> communication server.
               </p>
             </div>
