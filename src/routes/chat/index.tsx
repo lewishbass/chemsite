@@ -70,7 +70,7 @@ export default component$(() => {
           const email = session.value?.user?.email ?? '';
           const rawName = email.split('@')[0];
           // Revolt usernames: 2–32 chars, only Unicode letters, digits, _ . -
-          const cleaned = rawName.replace(/[^\p{L}\d_.\-]/gu, '').slice(0, 32);
+          const cleaned = rawName.replace(/[^\p{L}\d_.-]/gu, '').slice(0, 32);
           const safeUsername = cleaned.length >= 2 ? cleaned : (cleaned + '00').slice(0, 32);
           await fetch("https://chat.chemistryml.com/api/onboard/complete", {
             method: "POST",
@@ -507,7 +507,7 @@ export default component$(() => {
                             const tempToken: string | undefined = loginData.token;
                             if (tempToken) {
                               const rawName = email.split('@')[0];
-                              const cleaned = rawName.replace(/[^\p{L}\d_.\-]/gu, '').slice(0, 32);
+                              const cleaned = rawName.replace(/[^\p{L}\d_.-]/gu, '').slice(0, 32);
                               const safeUsername = cleaned.length >= 2 ? cleaned : (cleaned + '00').slice(0, 32);
                               await fetch("https://chat.chemistryml.com/api/onboard/complete", {
                                 method: "POST",
