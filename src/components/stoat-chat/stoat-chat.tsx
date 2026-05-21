@@ -1050,7 +1050,7 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
 
       {/* Right sidebar: server members */}
       {status.value === 'ready' && membersServerId.value && rightOpen.value && (
-        <aside class="w-44 shrink-0 border-l border-(--color-rim) overflow-y-auto py-2">
+        <aside class="w-[150px] shrink-0 border-l border-(--color-rim) overflow-y-auto py-2">
           <p class="px-3 pt-2 pb-3 text-[10px] font-bold uppercase tracking-widest text-muted">
             Members — {members.value.length}
           </p>

@@ -171,15 +171,15 @@ export default component$(() => {
               </FadingDisplay>
             </div>
           </div>
-          <div class="relative dash-left dash-right w-full p-16 overflow-hidden">
+          <div class="relative dash-left dash-right w-full p-16 overflow-hidden h-120">
             <h2 class="text-ink text-center mb-6 relative z-20 pointer-events-none">Put Graphs Here</h2>
             <p class="text-muted font-semibold text-lg max-w-2xl mx-auto text-center pointer-events-none pl-20">
               <ScrollThrough word_list={['add', 'more', 'blurbs']} /> static blurb.
             </p>
-            <div class="relative translate-y-0 translate-x-40 -mb-10 z-20">
+            <div class="absolute bottom-4 -right-10">
               <DynamicGraphDemo />
             </div>
-            <div class="absolute top-0 left-0 z-1">
+            <div class="absolute top-0 left-0 z-1 w-[600px] aspect-square max-sm:w-[300px] max-sm:-top-40">
               <DynamicGraphDemo2 />
             </div>
           </div>
