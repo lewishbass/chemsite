@@ -1,7 +1,7 @@
 import { component$, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
 import { LuChevronLeft, LuClock, LuPaperclip, LuPencil, LuReply, LuSmile, LuTrash2, LuUpload, LuUser, LuUserCheck, LuUserPlus, LuX } from '@qwikest/icons/lucide';
 import {
-  STOAT_WS, STOAT_AUTUMN, avatarUrl, ackChannel, parseContent,
+  STOAT_WS, STOAT_AUTUMN, avatarUrl, ackChannel, ulidToDate, formatTime,
   type StoatMsg, type StoatChannel, type StoatServer, type StoatMember, type StoatEmoji,
   type WsReady, type WsMessage, type WsMessageUpdate, type WsMessageDelete,
   type WsMessageReact, type WsMessageUnreact,
@@ -22,7 +22,88 @@ function isEmojiOnly(content: string): boolean {
   return s.length === 0;
 }
 
-const QUICK_EMOJI = ['👍', '👎', '❤️', '😂', '😮', '😢', '🎉', '🔥', '👀', '✅'];
+const QUICK_EMOJI = ['👍', '👎', '❤️', '💯', '😂', '😮', '😢', '😬', '😍', '🔥', '👀', '🗿', '🙏🏻', '🦐'];
+
+// Lazily-initialised singleton marked instance (shared across all MarkdownMessage renders)
+type MarkedInstance = { parse: (src: string) => Promise<string> | string };
+let _markedInstance: MarkedInstance | null = null;
+let _DOMPurify: typeof import('dompurify').default | null = null;
+
+async function getRenderer() {
+  if (_markedInstance) return { renderer: _markedInstance, DOMPurify: _DOMPurify! };
+  const [{ Marked }, { markedHighlight }, { default: hljs }, { default: katexExt }, { default: DOMPurify }] = await Promise.all([
+    import('marked'),
+    import('marked-highlight'),
+    import('highlight.js'),
+    import('marked-katex-extension'),
+    import('dompurify'),
+  ]);
+  // Inject highlight.js + KaTeX CSS once
+  if (!document.getElementById('hljs-css')) {
+    const l = document.createElement('link');
+    l.id = 'hljs-css'; l.rel = 'stylesheet';
+    l.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css';
+    document.head.appendChild(l);
+  }
+  if (!document.getElementById('katex-css')) {
+    const l = document.createElement('link');
+    l.id = 'katex-css'; l.rel = 'stylesheet';
+    l.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css';
+    document.head.appendChild(l);
+  }
+  const renderer = new Marked(
+    markedHighlight({
+      langPrefix: 'hljs language-',
+      emptyLangClass: 'hljs',
+      highlight(code: string, lang: string) {
+        const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+        return hljs.highlight(code, { language }).value;
+      },
+    }),
+  );
+  renderer.use(katexExt({ throwOnError: false, nonStandard: true }));
+  _markedInstance = renderer as unknown as MarkedInstance;
+  _DOMPurify = DOMPurify;
+  return { renderer: _markedInstance, DOMPurify };
+}
+
+async function renderMarkdownHtml(content: string, serverEmojis: Record<string, StoatEmoji>, emojiOnly: boolean): Promise<string> {
+  const { renderer, DOMPurify } = await getRenderer();
+  // Replace custom Stoat emoji :ULID: with img tags before markdown parsing
+  const processed = content.replace(/:([0-9A-Z]{26}):/g, (_: string, id: string) => {
+    const emoji = serverEmojis[id];
+    const name = emoji?.name ?? id;
+    const cls = emojiOnly ? 'h-16 w-16' : 'h-5 w-5';
+    return `<img src="${STOAT_AUTUMN}/emojis/${id}" alt=":${name}:" class="inline-block align-text-bottom mx-0.5 ${cls}" />`;
+  });
+  const rawHtml = await renderer.parse(processed);
+  return DOMPurify.sanitize(rawHtml, {
+    USE_PROFILES: { html: true },
+    // Allow KaTeX spans and highlight.js class attributes
+    ADD_ATTR: ['class', 'style'],
+  });
+}
+
+const MarkdownMessage = component$<{ content: string; serverEmojis: Record<string, StoatEmoji>; emojiOnly: boolean }>(
+  ({ content, serverEmojis, emojiOnly }) => {
+    const containerRef = useSignal<Element>();
+
+    // eslint-disable-next-line qwik/no-use-visible-task
+    useVisibleTask$(async ({ track }) => {
+      track(() => content);
+      const el = containerRef.value as HTMLElement | undefined;
+      if (!el) return;
+      el.innerHTML = await renderMarkdownHtml(content, serverEmojis, emojiOnly);
+    });
+
+    return (
+      <div
+        ref={containerRef}
+        class={`text-sm text-ink break-words leading-relaxed markdown-content${emojiOnly ? ' !text-5xl !leading-tight' : ''}`}
+      />
+    );
+  },
+);
 
 const presenceColor = (p: PresenceStatus | undefined | null): string => {
   switch (p) {
@@ -68,17 +149,60 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
   const leftOpen = useSignal(true);
   const rightOpen = useSignal(true);
   const outerRef = useSignal<Element>();
+  const bottomSentinelRef = useSignal<Element>();
+  const isAtBottom = useSignal(true); // whether user is scrolled to the bottom
 
-  const input_style = "w-full rounded-lg px-6 py-2 active:outline-none focus:ring-none focus:outline-none focus:bg-(--color-canvas)/50 transition-colors duration-300 text-(--color-ink)";
+  const input_style = "w-full rounded-lg px-6 py-2.5 active:outline-none focus:ring-none focus:outline-none focus:bg-(--color-canvas)/50 transition-colors duration-300 text-(--color-ink) resize-none mini-scroll";
 
 
-  // Auto-scroll to bottom only when new messages arrive (not on reactions/edits)
+  // Track whether the user is scrolled to the bottom via IntersectionObserver on a sentinel element.
+  // Defaults to anchored-at-bottom; if the user scrolls up the sentinel goes out of view.
+  // When the sentinel becomes visible again (user scrolls down OR content finishes rendering),
+  // scroll it into view to keep the user anchored to the latest messages.
+  // eslint-disable-next-line qwik/no-use-visible-task
+  useVisibleTask$(({ track, cleanup }) => {
+    const el = track(() => bottomSentinelRef.value);
+    if (!el) return;
+    const scrollContainer = msgsEl.value;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        isAtBottom.value = entry.isIntersecting;
+        if (entry.isIntersecting && scrollContainer) {
+          scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: 'instant' });
+        }
+      },
+      { root: scrollContainer, rootMargin: '0px 0px 150px 0px' },
+    );
+    observer.observe(el);
+    cleanup(() => observer.disconnect());
+  });
+
+  // Scroll to bottom when new messages arrive, but only if the user hasn't scrolled up.
+  // Also scroll on initial load (messages.length changes for the first time).
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(({ track }) => {
-    track(() => newMsgCount.value);
-    if (msgsEl.value) {
-      msgsEl.value.scrollTop = msgsEl.value.scrollHeight;
+    track(() => messages.value.length);
+    if (isAtBottom.value) {
+      requestAnimationFrame(() => {
+        const container = msgsEl.value;
+        if (container) container.scrollTo({ top: container.scrollHeight, behavior: 'instant' });
+      });
     }
+  });
+
+  // Watch for DOM mutations in the message list (async markdown rendering, image loads, etc.)
+  // and keep the scroll position anchored to the bottom when the user hasn't scrolled up.
+  // eslint-disable-next-line qwik/no-use-visible-task
+  useVisibleTask$(({ track, cleanup }) => {
+    const container = track(() => msgsEl.value);
+    if (!container) return;
+    const observer = new MutationObserver(() => {
+      if (isAtBottom.value) {
+        container.scrollTo({ top: container.scrollHeight, behavior: 'instant' });
+      }
+    });
+    observer.observe(container, { childList: true, subtree: true, characterData: true });
+    cleanup(() => observer.disconnect());
   });
 
   // WebSocket lifecycle — runs once when the component enters the viewport
@@ -159,6 +283,8 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
             channel: msg.channel,
             attachments: msg.attachments,
             replies: msg.replies,
+            createdAt: ulidToDate(msg._id),
+            edited: msg.edited ?? null,
           }];
           newMsgCount.value++;
           // Auto-ack messages received while viewing the channel
@@ -212,7 +338,7 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
         if (upd.channel === activeId.value) {
           messages.value = messages.value.map((m) =>
             m._id === upd.id
-              ? { ...m, content: upd.data?.content ?? m.content }
+              ? { ...m, content: upd.data?.content ?? m.content, edited: upd.data?.edited ?? m.edited }
               : m
           );
         }
@@ -716,7 +842,9 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
                 <p class="text-muted text-sm italic">No messages yet.</p>
               )}
               {messages.value.map((msg, idx) => {
-                const isGrouped = idx > 0 && messages.value[idx - 1].author === msg.author;
+                const prev = idx > 0 ? messages.value[idx - 1] : null;
+                const isGrouped = !!(prev && prev.author === msg.author &&
+                  (msg.createdAt.getTime() - prev.createdAt.getTime()) < 120_000);
                 return (
                   <div key={msg._id} class={`group/msg relative hover:bg-(--color-edge)/10 rounded-md px-1 -mx-1 pt-0.5 ${isGrouped ? '-mt-3' : ''}`}>
 
@@ -785,11 +913,13 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
                     </div>
                   )}
 
-                    {/* Author — hidden for consecutive messages from the same person */}
+                    {/* Author — hidden for consecutive messages from the same person within 2 min */}
                     {!isGrouped && (
-                      <p class="text-xs font-semibold text-(--color-accent-muted) mb-0.5">
-                        {chatState.userNames[msg.author] ?? msg.author}
-                      </p>
+                      <div class="text-xs font-semibold text-(--color-accent-muted) mb-0.5 flex items-end gap-2">
+                        <span>{chatState.userNames[msg.author] ?? msg.author}</span>
+                        <span class="text-[10px] font-normal text-muted/60">{formatTime(msg.createdAt)}</span>
+                        {msg.edited && <span class="text-[10px] font-normal text-muted/40 italic">(edited)</span>}
+                      </div>
                     )}
 
                   {/* Content — edit mode or normal */}
@@ -814,26 +944,11 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
                       </button>
                     </div>
                   ) : (
-                    (() => {
-                      const emojiOnly = isEmojiOnly(msg.content ?? '');
-                      return (
-                        <p class={`text-sm text-ink whitespace-pre-wrap break-words leading-relaxed${emojiOnly ? ' !text-5xl !leading-tight' : ''}`}>
-                          {parseContent(msg.content ?? '', chatState.serverEmojis).map(part =>
-                            part.type === 'text' ? (
-                              <span key={part.key}>{part.text}</span>
-                            ) : (
-                              <img
-                                key={part.key}
-                                src={`${STOAT_AUTUMN}/emojis/${part.id}`}
-                                alt={`:${part.name}:`}
-                                title={`:${part.name}:`}
-                                class={`inline-block align-text-bottom mx-0.5${emojiOnly ? ' h-16 w-16' : ' h-5 w-5'}`}
-                              />
-                            )
-                          )}
-                        </p>
-                      );
-                    })()
+                        <MarkdownMessage
+                          content={msg.content ?? ''}
+                          serverEmojis={chatState.serverEmojis}
+                          emojiOnly={isEmojiOnly(msg.content ?? '')}
+                        />
                   )}
 
                   {/* Attachments */}
@@ -895,6 +1010,8 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
                 </div>
                 );
               })}
+              {/* Sentinel element for scroll anchoring */}
+              <div ref={bottomSentinelRef} />
             </div>
             
 
@@ -972,14 +1089,17 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
                   el.value = '';
                 }} />
               </label>
-              <input
-                type="text"
+              <textarea
+                rows={1}
                 placeholder={`Message #${activeName.value || 'general'}…`}
 
                 class={input_style + " -mr-[2px]"}
                 value={inputText.value}
                 onInput$={(_, el) => {
                   inputText.value = el.value;
+                  // Auto-resize
+                  el.style.height = 'auto';
+                  el.style.height = Math.min(el.scrollHeight, 160) + 'px';
                   const ws = wsRef.value;
                   const chId = activeId.value;
                   if (ws && chId) {
@@ -991,26 +1111,31 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
                     }, 2500) as unknown as ReturnType<typeof setTimeout>;
                   }
                 }}
-                onKeyDown$={async (e) => {
-                  if (e.key !== 'Enter' || e.shiftKey || sending.value) return;
-                  const content = inputText.value.trim();
-                  if ((!content && !pendingAttachmentIds.value.length) || !activeId.value) return;
-                  inputText.value = '';
-                  sending.value = true;
-                  if (typingTimeoutId.value !== null) { clearTimeout(typingTimeoutId.value); typingTimeoutId.value = null; }
-                  wsRef.value?.send(JSON.stringify({ type: 'EndTyping', channel: activeId.value }));
-                  const attIds = [...pendingAttachmentIds.value];
-                  const replyMsg = replyTo.value;
-                  pendingAttachmentIds.value = [];
-                  pendingAttachmentPreviews.value = [];
-                  replyTo.value = null;
-                  try {
-                    await sendMessage(activeId.value, content, token, {
-                      attachments: attIds.length ? attIds : undefined,
-                      replies: replyMsg ? [{ id: replyMsg._id, mention: false }] : undefined,
-                    });
-                  } finally {
-                    sending.value = false;
+                onKeyDown$={async (e, el) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (sending.value) return;
+                    const content = inputText.value.trim();
+                    if ((!content && !pendingAttachmentIds.value.length) || !activeId.value) return;
+                    inputText.value = '';
+                    sending.value = true;
+                    if (typingTimeoutId.value !== null) { clearTimeout(typingTimeoutId.value); typingTimeoutId.value = null; }
+                    wsRef.value?.send(JSON.stringify({ type: 'EndTyping', channel: activeId.value }));
+                    const attIds = [...pendingAttachmentIds.value];
+                    const replyMsg = replyTo.value;
+                    pendingAttachmentIds.value = [];
+                    pendingAttachmentPreviews.value = [];
+                    replyTo.value = null;
+                    // Reset textarea height
+                    el.style.height = 'auto';
+                    try {
+                      await sendMessage(activeId.value, content, token, {
+                        attachments: attIds.length ? attIds : undefined,
+                        replies: replyMsg ? [{ id: replyMsg._id, mention: false }] : undefined,
+                      });
+                    } finally {
+                      sending.value = false;
+                    }
                   }
                 }}
               />

@@ -22,6 +22,24 @@ export type StoatAttachment = {
   size?: number;
 };
 
+/** Decode the timestamp embedded in a ULID (first 10 chars = Crockford Base32 millisecond timestamp). */
+export function ulidToDate(ulid: string): Date {
+  const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+  const chars = ulid.slice(0, 10).toUpperCase();
+  let timestamp = 0;
+  for (const ch of chars) {
+    const idx = alphabet.indexOf(ch);
+    if (idx === -1) break;
+    timestamp = timestamp * 32 + idx;
+  }
+  return new Date(timestamp);
+}
+
+/** Format a Date to a short time string like "14:32". */
+export function formatTime(d: Date): string {
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 export type StoatMsg = {
   _id: string;
   content?: string | null;
@@ -30,6 +48,8 @@ export type StoatMsg = {
   attachments?: StoatAttachment[];
   reactions?: Record<string, string[]>;
   replies?: string[];
+  createdAt: Date;     // decoded from ULID _id
+  edited?: string | null; // ISO timestamp from server, present when edited
 };
 
 export type StoatChannel = {
@@ -138,13 +158,14 @@ export type WsMessage = {
   attachments?: StoatAttachment[];
   replies?: string[];
   mentions?: string[];  // user IDs of @mentioned users
+  edited?: string | null; // ISO timestamp when edited
 };
 
 export type WsMessageUpdate = {
   type: 'MessageUpdate';
   id: string;
   channel: string;
-  data: { content?: string | null };
+  data: { content?: string | null; edited?: string | null };
 };
 
 export type WsMessageDelete = {
@@ -254,7 +275,18 @@ export async function fetchMessages(
     );
     if (!r.ok) return { msgs: [], users: [] };
     const body = await r.json();
-    const msgs = ([...(body.messages ?? body)] as StoatMsg[]).reverse();
+    const rawMsgs = ([...(body.messages ?? body)] as Array<Record<string, unknown>>).reverse();
+    const msgs: StoatMsg[] = rawMsgs.map(m => ({
+      _id: m._id as string,
+      content: m.content as string | null | undefined,
+      author: m.author as string,
+      channel: m.channel as string,
+      attachments: m.attachments as StoatAttachment[] | undefined,
+      reactions: m.reactions as Record<string, string[]> | undefined,
+      replies: m.replies as string[] | undefined,
+      createdAt: ulidToDate(m._id as string),
+      edited: (m.edited as string | null) ?? null,
+    }));
     return { msgs, users: (body.users ?? []) as WsReadyUser[] };
   } catch {
     return { msgs: [], users: [] };

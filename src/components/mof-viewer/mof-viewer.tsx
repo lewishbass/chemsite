@@ -275,12 +275,14 @@ export const MofViewer = component$<{ cifPaths: string[] }>(({ cifPaths }) => {
         l.setAttribute('stroke', STROKE);
         l.setAttribute('stroke-linecap', 'round');
         l.setAttribute('stroke-dasharray', '8 4');
+        l.setAttribute('shape-rendering', 'geometricPrecision');
         bondsG.appendChild(l);
         return l;
       });
 
       atomEls = m.atoms.map(() => {
         const c = document.createElementNS(NS, 'circle');
+        c.setAttribute('shape-rendering', 'geometricPrecision');
         atomsG.appendChild(c);
         return c;
       });

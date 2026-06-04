@@ -440,8 +440,8 @@ ws.onmessage = (event) => {
     case "Authenticated":        // successfully authenticated
     case "Ready":                // initial state: msg.users, msg.servers, msg.channels
       // users include `relationship` field; channels include DMs
-    case "Message":             // new message: msg.channel, msg._id, msg.author, msg.content
-    case "MessageUpdate":       // edit: msg.id, msg.channel, msg.data
+    case "Message":             // new message: msg.channel, msg._id, msg.author, msg.content, msg.edited?
+    case "MessageUpdate":       // edit: msg.id, msg.channel, msg.data.content, msg.data.edited?
     case "MessageDelete":       // delete: msg.id, msg.channel
     case "UserRelationship":    // relationship changed: msg.id (user), msg.user, msg.status
     case "UserPresence":        // presence changed: msg.id (user), msg.online
@@ -743,8 +743,8 @@ Standard Unicode emoji (👍, ❤️, etc.) appear as raw Unicode characters.
 | `EndTyping` | `channel` | Client → Server |
 | `Authenticated` | — | Server → Client |
 | `Ready` | `users[]`, `servers[]`, `channels[]`, `emojis[]` | Server → Client |
-| `Message` | `_id`, `channel`, `author`, `content?`, `attachments?[]`, `replies?[]`, `mentions?[]` | Server → Client |
-| `MessageUpdate` | `id`, `channel`, `data.content` | Server → Client |
+| `Message` | `_id`, `channel`, `author`, `content?`, `attachments?[]`, `replies?[]`, `mentions?[]`, `edited?` | Server → Client |
+| `MessageUpdate` | `id`, `channel`, `data.content`, `data.edited?` | Server → Client |
 | `MessageDelete` | `id`, `channel` | Server → Client |
 | `MessageReact` | `id` (msg), `channel_id`, `user_id`, `emoji_id` | Server → Client |
 | `MessageUnreact` | `id` (msg), `channel_id`, `user_id`, `emoji_id` | Server → Client |
@@ -774,6 +774,23 @@ type Message = {
   edited?: string;                      // ISO timestamp if edited
   embeds?: Embed[];
 };
+```
+
+> **Note:** Stoat/Revolt uses ULIDs for `_id`. The first 10 characters are a 48-bit Crockford Base32 millisecond timestamp. Decode with:
+> ```typescript
+> function ulidToDate(ulid: string): Date {
+>   const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+>   const chars = ulid.slice(0, 10).toUpperCase();
+>   let timestamp = 0;
+>   for (const ch of chars) {
+>     const idx = alphabet.indexOf(ch);
+>     if (idx === -1) break;
+>     timestamp = timestamp * 32 + idx;
+>   }
+>   return new Date(timestamp);
+> }
+> ```
+> The API does **not** return a `createdAt` field — message creation time must be derived from the ULID `_id`. The `edited` field is an ISO 8601 timestamp set when the message has been edited.
 ```
 
 ### Attachment object
@@ -1054,6 +1071,10 @@ await fetch(`https://chat.chemistryml.com/channels/${channelId}/messages`, {
 - Attachments with `metadata.type === "Image"` render as `<img>` (max 300 px wide); all others render as download links
 - `msg.replies[]` are message IDs — look them up in the current messages array to render a reply preview header
 - `msg.reactions` is `Record<emojiId, userId[]>` — highlight pills where `userId[]` includes `currentUserId`
+- Display message timestamp (from `ulidToDate(msg._id)`) next to the author name in short time format (e.g. `14:32`)
+- If `msg.edited` is set (non-null ISO timestamp), append an `(edited)` indicator next to the timestamp
+- **Message grouping:** Consecutive messages from the same author are visually grouped (author name hidden) only if they were sent within 2 minutes of each other. Compare `msg.createdAt.getTime()` difference: `< 120_000` ms → grouped
+- The `createdAt` field is derived from the ULID `_id` client-side; it is **not** returned by the API
 
 ### Unread tracking
 The `ChannelAck` WS event is the signal that a channel has been read. Compare the acked `message_id` against the last known message in that channel to determine whether a channel still has unread messages. On initial load, `GET /users/@me` returns `unreads[]` with `{ channel: id, last_id: id }`.
