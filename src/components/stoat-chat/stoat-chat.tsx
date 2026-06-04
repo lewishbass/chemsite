@@ -8,7 +8,7 @@ import {
   type WsChannelAck, type WsEvent, type StoatChatState,
   type WsVoiceChannelJoin, type WsVoiceChannelLeave, type WsVoiceChannelMove, type WsVoiceStateUpdate,
   fetchServerMembers, openDMChannel, activateChannelData,
-  fetchServerChannels, sendMessage, joinVoiceChannel,
+  fetchServerChannels, sendMessage,
 } from './stoat_scripts';
 import { ChatSidebarLeft } from './chat-sidebar-left';
 import { ChatSidebarRight } from './chat-sidebar-right';
@@ -249,13 +249,13 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
       } else if (evt.type === 'VoiceChannelLeave') {
         const v = evt as WsVoiceChannelLeave;
         const uid2 = v.data.user_id;
-        const { [uid2]: _, ...rest } = chatState.voiceParticipants;
+        const { [uid2]: _voiceLeave, ...rest } = chatState.voiceParticipants;
         chatState.voiceParticipants = rest;
 
       } else if (evt.type === 'VoiceChannelMove') {
         const v = evt as WsVoiceChannelMove;
         const uid3 = v.data.user_id;
-        const { [uid3]: _2, ...rest2 } = chatState.voiceParticipants;
+        const { [uid3]: _voiceMove, ...rest2 } = chatState.voiceParticipants;
         chatState.voiceParticipants = {
           ...rest2,
           [uid3]: v.data.state,
