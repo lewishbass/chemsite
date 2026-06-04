@@ -397,13 +397,6 @@ export const VoicePanel = component$<VoicePanelProps>(
             },
           });
 
-          // Catch all events that prints to console for debugging
-          for (const evt of Object.values(RoomEvent)) {
-            r.on(evt as string, (...args: any[]) => {
-              if(evt === RoomEvent.ActiveSpeakersChanged) return; // too noisy
-              console.log(`[LiveKit Room] ${evt}`, ...args);
-            });
-          }
 
           // ── Room event: Connected ───────────────────────────────────
           r.on(RoomEvent.Connected, () => {
