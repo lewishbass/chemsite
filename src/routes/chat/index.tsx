@@ -48,6 +48,10 @@ export default component$(() => {
     userNames: {},
     userAvatars: {},
     serverEmojis: {},
+    activeVoiceChannelId: '',
+    voiceParticipants: {},
+    liveKitUrl: '',
+    liveKitToken: '',
   });
   const fetchedInvites = useSignal<Record<string, InviteInfo>>({});
 

@@ -37,7 +37,10 @@ export function ulidToDate(ulid: string): Date {
 
 /** Format a Date to a short time string like "14:32". */
 export function formatTime(d: Date): string {
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // if not posted today, include date: "Mar 5, 14:32"
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  return isToday ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export type StoatMsg = {
@@ -117,6 +120,31 @@ export type StoatMember = {
   display_name?: string | null;
   online?: boolean;
   status?: { presence?: PresenceStatus; text?: string | null };
+};
+
+// ── Voice types ────────────────────────────────────────────────────────────────
+
+/** Response from POST /0.8/channels/{id}/join — LiveKit connection info. */
+export type VoiceJoinResponse = {
+  url: string;   // wss://livekit.…
+  token: string; // LiveKit JWT
+};
+
+/** Payload for PATCH /0.8/channels/{id}/members/@me/voice. */
+export type VoiceStateUpdatePayload = {
+  mute?: boolean;
+  deaf?: boolean;
+  video?: boolean;
+};
+
+/** Voice state of a single participant in a voice channel. */
+export type VoiceState = {
+  user_id: string;
+  mute: boolean;
+  deaf: boolean;
+  video: boolean;
+  self_mute: boolean;
+  self_deaf: boolean;
 };
 
 export type RelationshipStatus =
@@ -231,6 +259,43 @@ export type WsMessageUnreact = {
   emoji_id: string;
 };
 
+// ── WebSocket voice event types ────────────────────────────────────────────────
+
+export type WsVoiceChannelJoin = {
+  type: 'VoiceChannelJoin';
+  data: {
+    channel_id: string;
+    state: VoiceState;
+  };
+};
+
+export type WsVoiceChannelLeave = {
+  type: 'VoiceChannelLeave';
+  data: {
+    user_id: string;
+    channel_id: string;
+  };
+};
+
+export type WsVoiceChannelMove = {
+  type: 'VoiceChannelMove';
+  data: {
+    user_id: string;
+    from: string;
+    to: string;
+    state: VoiceState;
+  };
+};
+
+export type WsVoiceStateUpdate = {
+  type: 'VoiceStateUpdate';
+  data: {
+    user_id: string;
+    channel_id: string;
+    state: VoiceState;
+  };
+};
+
 export type WsEvent =
   | { type: 'Authenticated' }
   | WsReady
@@ -245,6 +310,10 @@ export type WsEvent =
   | WsChannelStartTyping
   | WsChannelStopTyping
   | WsChannelAck
+  | WsVoiceChannelJoin
+  | WsVoiceChannelLeave
+  | WsVoiceChannelMove
+  | WsVoiceStateUpdate
   | { type: string };
 
 // ── Shared reactive state (useStore in parent, passed to StoatChat as prop) ───
@@ -260,6 +329,11 @@ export type StoatChatState = {
   userNames: Record<string, string>;
   userAvatars: Record<string, string>; // userId → avatar URL
   serverEmojis: Record<string, StoatEmoji>; // emojiId → emoji
+  // Voice state
+  activeVoiceChannelId: string;          // '' means not in a voice channel
+  voiceParticipants: Record<string, VoiceState>; // userId → voice state
+  liveKitUrl: string;                    // cached LiveKit URL for reconnects
+  liveKitToken: string;                  // cached LiveKit JWT for reconnects
 };
 
 // ── API helpers ───────────────────────────────────────────────────────────────
@@ -449,6 +523,27 @@ export async function openDMChannel(
   }
 }
 
+/**
+ * Activate a channel: fetch its messages and merge discovered user names.
+ * Eliminates the repetitive channel-switching pattern from the chat component.
+ */
+export async function activateChannelData(
+  channelId: string,
+  token: string,
+  existingNames: Record<string, string>,
+): Promise<{
+  msgs: StoatMsg[];
+  users: WsReadyUser[];
+  userNames: Record<string, string>;
+}> {
+  const { msgs, users } = await fetchMessages(channelId, token);
+  const userNames = { ...existingNames };
+  for (const u of users) {
+    userNames[u._id] = u.display_name || u.username || u._id;
+  }
+  return { msgs, users, userNames };
+}
+
 export async function fetchServerChannels(
   serverId: string,
   token: string,
@@ -567,4 +662,75 @@ export async function editUserProfile(
   } catch {
     return false;
   }
+}
+
+// ── Voice channel API helpers ─────────────────────────────────────────────────
+
+/**
+ * Join a voice channel. Returns the LiveKit URL and a signed Join Token.
+ * POST /0.8/channels/{channel_id}/join
+ */
+export async function joinVoiceChannel(
+  channelId: string,
+  token: string,
+): Promise<VoiceJoinResponse | null> {
+  try {
+    const r = await fetch(
+      `${STOAT_BASE}/api/channels/${encodeURIComponent(channelId)}/join_call?`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-token': token,
+        },
+        body: JSON.stringify({ node: 'worldwide', force_disconnect: true }),
+      },
+    );
+    if (!r.ok) {
+      console.warn('joinVoiceChannel failed', r.status, await r.text().catch(() => ''));
+      return null;
+    }
+    return r.json() as Promise<VoiceJoinResponse>;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Update your own voice state (mute, deafen, video on/off).
+ * PATCH /0.8/channels/{channel_id}/members/@me/voice
+ */
+export async function updateMyVoiceState(
+  channelId: string,
+  payload: VoiceStateUpdatePayload,
+  token: string,
+): Promise<boolean> {
+  try {
+    const r = await fetch(
+      `${STOAT_BASE}/api/channels/${encodeURIComponent(channelId)}/members/@me/voice`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-session-token': token },
+        body: JSON.stringify(payload),
+      },
+    );
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Disconnect from a voice channel — simply disconnect your LiveKit room.
+ * No REST endpoint needed; this helper is provided for documentation clarity.
+ * IMPORTANT: After calling room.disconnect(), the server auto-detects
+ * the departure via LiveKit webhooks and broadcasts VoiceChannelLeave.
+ */
+export async function leaveVoiceChannel(
+  _channelId: string,
+  _token: string,
+): Promise<boolean> {
+  // LiveKit departure is detected server-side via webhook.
+  // This exists as a stub in case future server-side cleanup is needed.
+  return true;
 }

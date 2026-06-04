@@ -1,217 +1,100 @@
-import { component$, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
-import { LuChevronLeft, LuClock, LuPaperclip, LuPencil, LuReply, LuSmile, LuTrash2, LuUpload, LuUser, LuUserCheck, LuUserPlus, LuX } from '@qwikest/icons/lucide';
+import { component$, useSignal, useStore, useVisibleTask$, $ } from '@builder.io/qwik';
 import {
-  STOAT_WS, STOAT_AUTUMN, avatarUrl, ackChannel, ulidToDate, formatTime,
+  STOAT_WS, avatarUrl, ackChannel, ulidToDate,
   type StoatMsg, type StoatChannel, type StoatServer, type StoatMember, type StoatEmoji,
   type WsReady, type WsMessage, type WsMessageUpdate, type WsMessageDelete,
   type WsMessageReact, type WsMessageUnreact,
   type WsUserRelationship, type WsChannelCreate, type WsChannelStartTyping, type WsChannelStopTyping,
-  type WsChannelAck, type WsEvent, type StoatChatState, type PresenceStatus,
-  fetchMessages, sendMessage, fetchServerMembers, openDMChannel, sendFriendRequest, acceptFriendRequest,
-  uploadAttachment, deleteMessage, editMessage, reactToMessage, unreactFromMessage, fetchServerChannels,
+  type WsChannelAck, type WsEvent, type StoatChatState,
+  type WsVoiceChannelJoin, type WsVoiceChannelLeave, type WsVoiceChannelMove, type WsVoiceStateUpdate,
+  fetchServerMembers, openDMChannel, activateChannelData,
+  fetchServerChannels, sendMessage, joinVoiceChannel,
 } from './stoat_scripts';
+import { ChatSidebarLeft } from './chat-sidebar-left';
+import { ChatSidebarRight } from './chat-sidebar-right';
+import { ChatMessageList } from './chat-message-list';
+import { ChatInput } from './chat-input';
+import { LuHeadphones } from '@qwikest/icons/lucide';
+import { VoicePanel } from './voice-panel';
 
 export type { StoatChatState };
 
-function isEmojiOnly(content: string): boolean {
-  const t = content.trim();
-  if (!t) return false;
-  let s = t.replace(/:([0-9A-Z]{26}):/g, '');
-  s = s.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}][\uFE0F\u200D\p{Emoji_Modifier}]*/gu, '');
-  s = s.replace(/[\uFE0F\uFE0E\u200D\s]/gu, '');
-  return s.length === 0;
-}
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
-const QUICK_EMOJI = ['👍', '👎', '❤️', '💯', '😂', '😮', '😢', '😬', '😍', '🔥', '👀', '🗿', '🙏🏻', '🦐'];
-
-// Lazily-initialised singleton marked instance (shared across all MarkdownMessage renders)
-type MarkedInstance = { parse: (src: string) => Promise<string> | string };
-let _markedInstance: MarkedInstance | null = null;
-let _DOMPurify: typeof import('dompurify').default | null = null;
-
-async function getRenderer() {
-  if (_markedInstance) return { renderer: _markedInstance, DOMPurify: _DOMPurify! };
-  const [{ Marked }, { markedHighlight }, { default: hljs }, { default: katexExt }, { default: DOMPurify }] = await Promise.all([
-    import('marked'),
-    import('marked-highlight'),
-    import('highlight.js'),
-    import('marked-katex-extension'),
-    import('dompurify'),
-  ]);
-  // Inject highlight.js + KaTeX CSS once
-  if (!document.getElementById('hljs-css')) {
-    const l = document.createElement('link');
-    l.id = 'hljs-css'; l.rel = 'stylesheet';
-    l.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css';
-    document.head.appendChild(l);
-  }
-  if (!document.getElementById('katex-css')) {
-    const l = document.createElement('link');
-    l.id = 'katex-css'; l.rel = 'stylesheet';
-    l.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css';
-    document.head.appendChild(l);
-  }
-  const renderer = new Marked(
-    markedHighlight({
-      langPrefix: 'hljs language-',
-      emptyLangClass: 'hljs',
-      highlight(code: string, lang: string) {
-        const language = hljs.getLanguage(lang) ? lang : 'plaintext';
-        return hljs.highlight(code, { language }).value;
-      },
-    }),
-  );
-  renderer.use(katexExt({ throwOnError: false, nonStandard: true }));
-  _markedInstance = renderer as unknown as MarkedInstance;
-  _DOMPurify = DOMPurify;
-  return { renderer: _markedInstance, DOMPurify };
-}
-
-async function renderMarkdownHtml(content: string, serverEmojis: Record<string, StoatEmoji>, emojiOnly: boolean): Promise<string> {
-  const { renderer, DOMPurify } = await getRenderer();
-  // Replace custom Stoat emoji :ULID: with img tags before markdown parsing
-  const processed = content.replace(/:([0-9A-Z]{26}):/g, (_: string, id: string) => {
-    const emoji = serverEmojis[id];
-    const name = emoji?.name ?? id;
-    const cls = emojiOnly ? 'h-16 w-16' : 'h-5 w-5';
-    return `<img src="${STOAT_AUTUMN}/emojis/${id}" alt=":${name}:" class="inline-block align-text-bottom mx-0.5 ${cls}" />`;
-  });
-  const rawHtml = await renderer.parse(processed);
-  return DOMPurify.sanitize(rawHtml, {
-    USE_PROFILES: { html: true },
-    // Allow KaTeX spans and highlight.js class attributes
-    ADD_ATTR: ['class', 'style'],
-  });
-}
-
-const MarkdownMessage = component$<{ content: string; serverEmojis: Record<string, StoatEmoji>; emojiOnly: boolean }>(
-  ({ content, serverEmojis, emojiOnly }) => {
-    const containerRef = useSignal<Element>();
-
-    // eslint-disable-next-line qwik/no-use-visible-task
-    useVisibleTask$(async ({ track }) => {
-      track(() => content);
-      const el = containerRef.value as HTMLElement | undefined;
-      if (!el) return;
-      el.innerHTML = await renderMarkdownHtml(content, serverEmojis, emojiOnly);
-    });
-
-    return (
-      <div
-        ref={containerRef}
-        class={`text-sm text-ink break-words leading-relaxed markdown-content${emojiOnly ? ' !text-5xl !leading-tight' : ''}`}
-      />
-    );
+async function switchToChannel(
+  ch: StoatChannel,
+  token: string,
+  chatState: StoatChatState,
+  signals: {
+    activeId: { value: string };
+    activeName: { value: string };
+    messages: { value: StoatMsg[] };
+    unreadChannels: Record<string, boolean>;
+    newMsgCount: { value: number };
   },
-);
-
-const presenceColor = (p: PresenceStatus | undefined | null): string => {
-  switch (p) {
-    case 'Online': return 'bg-green-500';
-    case 'Idle':   return 'bg-yellow-400';
-    case 'Busy':   return 'bg-red-500';
-    case 'Focus':  return 'bg-purple-500';
-    default:       return 'bg-gray-500';
+) {
+  signals.activeId.value = ch._id;
+  signals.activeName.value = ch.name ?? '';
+  signals.messages.value = [];
+  const { msgs, users, userNames } = await activateChannelData(ch._id, token, chatState.userNames);
+  if (users.length) chatState.userNames = userNames;
+  signals.messages.value = msgs;
+  if (msgs.length) {
+    ackChannel(ch._id, msgs[msgs.length - 1]._id, token);
+    delete signals.unreadChannels[ch._id];
   }
-};
+  signals.newMsgCount.value++;
+  //console.log(`Switched to channel ${ch.name} (${ch._id}), loaded ${msgs.length} messages`);
+  //Object.keys(ch).forEach(k => console.log(`  ${k}:`, (ch as any)[k]));
+}
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Component ───────────────────────────────────────────────────────────────
 
 export const StoatChat = component$<{ token: string; chatState: StoatChatState }>(({ token, chatState }) => {
+  // ── State ───────────────────────────────────────────────────────────────
   const status = useSignal<'connecting' | 'ready' | 'error'>('connecting');
   const servers = useSignal<StoatServer[]>([]);
   const channels = useSignal<StoatChannel[]>([]);
   const activeId = useSignal('');
   const activeName = useSignal('');
   const messages = useSignal<StoatMsg[]>([]);
-  const inputText = useSignal('');
   const sending = useSignal(false);
-  const msgsEl = useSignal<Element>();
   const members = useSignal<StoatMember[]>([]);
   const membersServerId = useSignal('');
   const wsRef = useSignal<WebSocket | null>(null);
-  const unreadChannels = useStore<Record<string, boolean>>({});   // channelId → has unread
-  const typingByChannel = useStore<Record<string, string[]>>({}); // channelId → typing userIds
-  const typingTimeoutId = useSignal<ReturnType<typeof setTimeout> | null>(null);
+  const unreadChannels = useStore<Record<string, boolean>>({});
+  const typingByChannel = useStore<Record<string, string[]>>({});
   const replyTo = useSignal<StoatMsg | null>(null);
   const editingMsgId = useSignal('');
   const editingContent = useSignal('');
   const emojiPickerFor = useSignal('');
-  const pendingAttachmentIds = useSignal<string[]>([]);
-  const pendingAttachmentPreviews = useSignal<Array<{id: string; name: string; isImage: boolean; url: string}>>([]);
-  const fileUploading = useSignal(false);
-  const isDragOver = useSignal(false);
   const mainPanelRef = useSignal<Element>();
-  const newMsgCount = useSignal(0); // incremented only when a new message arrives; drives auto-scroll
-  const notifTitle = useSignal(''); // drives document title ticker; cleared when tab regains focus
+  const newMsgCount = useSignal(0);
+  const notifTitle = useSignal('');
   const leftOpen = useSignal(true);
   const rightOpen = useSignal(true);
   const outerRef = useSignal<Element>();
-  const bottomSentinelRef = useSignal<Element>();
-  const isAtBottom = useSignal(true); // whether user is scrolled to the bottom
+  const voiceConnected = useSignal(false);
 
-  const input_style = "w-full rounded-lg px-6 py-2.5 active:outline-none focus:ring-none focus:outline-none focus:bg-(--color-canvas)/50 transition-colors duration-300 text-(--color-ink) resize-none mini-scroll";
+  // ── Derive whether the active channel is a voice channel ─────────────
+  function isVoiceChannel(id: string): boolean {
+    const ch = channels.value.find(c => c._id === id);
+    // the api is wront, channel_type is never "VoiceChannel", and voice channels can be identified by the presence of the "voice" field
+    return Object.keys(ch ?? {}).includes('voice');
+  }
 
-
-  // Track whether the user is scrolled to the bottom via IntersectionObserver on a sentinel element.
-  // Defaults to anchored-at-bottom; if the user scrolls up the sentinel goes out of view.
-  // When the sentinel becomes visible again (user scrolls down OR content finishes rendering),
-  // scroll it into view to keep the user anchored to the latest messages.
-  // eslint-disable-next-line qwik/no-use-visible-task
-  useVisibleTask$(({ track, cleanup }) => {
-    const el = track(() => bottomSentinelRef.value);
-    if (!el) return;
-    const scrollContainer = msgsEl.value;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        isAtBottom.value = entry.isIntersecting;
-        if (entry.isIntersecting && scrollContainer) {
-          scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: 'instant' });
-        }
-      },
-      { root: scrollContainer, rootMargin: '0px 0px 150px 0px' },
-    );
-    observer.observe(el);
-    cleanup(() => observer.disconnect());
-  });
-
-  // Scroll to bottom when new messages arrive, but only if the user hasn't scrolled up.
-  // Also scroll on initial load (messages.length changes for the first time).
-  // eslint-disable-next-line qwik/no-use-visible-task
-  useVisibleTask$(({ track }) => {
-    track(() => messages.value.length);
-    if (isAtBottom.value) {
-      requestAnimationFrame(() => {
-        const container = msgsEl.value;
-        if (container) container.scrollTo({ top: container.scrollHeight, behavior: 'instant' });
-      });
-    }
-  });
-
-  // Watch for DOM mutations in the message list (async markdown rendering, image loads, etc.)
-  // and keep the scroll position anchored to the bottom when the user hasn't scrolled up.
-  // eslint-disable-next-line qwik/no-use-visible-task
-  useVisibleTask$(({ track, cleanup }) => {
-    const container = track(() => msgsEl.value);
-    if (!container) return;
-    const observer = new MutationObserver(() => {
-      if (isAtBottom.value) {
-        container.scrollTo({ top: container.scrollHeight, behavior: 'instant' });
-      }
+  // ── Shared channel activator (passed to child components) ──────────────
+  const activateChannel = $(async (channelId: string) => {
+    const ch = channels.value.find(c => c._id === channelId);
+    if (!ch) return;
+    await switchToChannel(ch, token, chatState, {
+      activeId, activeName, messages, unreadChannels, newMsgCount,
     });
-    observer.observe(container, { childList: true, subtree: true, characterData: true });
-    cleanup(() => observer.disconnect());
   });
 
-  // WebSocket lifecycle — runs once when the component enters the viewport
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(({ cleanup }) => {
-    if (!token) {
-      status.value = 'error';
-      return;
-    }
+    if (!token) { status.value = 'error'; return; }
 
     const ws = new WebSocket(STOAT_WS);
     wsRef.value = ws;
@@ -220,16 +103,16 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
 
     ws.onmessage = async (rawEvt: MessageEvent) => {
       let evt: WsEvent;
-      try {
-        evt = JSON.parse(rawEvt.data as string) as WsEvent;
-      } catch {
-        return;
+      try { evt = JSON.parse(rawEvt.data as string) as WsEvent; } catch { return; }
+
+      // Bonfire voice events use "event" instead of "type" — normalize
+      if (!evt.type && (evt as any).event) {
+        (evt as any).type = (evt as any).event;
       }
 
       if (evt.type === 'Ready') {
         const ready = evt as WsReady;
 
-        // Build userNames map and extract relationships from the initial user list
         const names: Record<string, string> = { ...chatState.userNames };
         const newAvatars: Record<string, string> = { ...chatState.userAvatars };
         const newRels: typeof chatState.relations = [];
@@ -245,7 +128,6 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
         chatState.userAvatars = newAvatars;
         if (newRels.length) chatState.relations = newRels;
 
-        // Populate emoji map from Ready payload
         const emojiMap: Record<string, StoatEmoji> = {};
         for (const e of ready.emojis ?? []) emojiMap[e._id] = e;
         if (Object.keys(emojiMap).length) chatState.serverEmojis = emojiMap;
@@ -255,66 +137,45 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
         servers.value = ready.servers ?? [];
         channels.value = ready.channels ?? [];
 
-        // Auto-select: try saved channel first, then fall back to first text channel
         const savedChannelId = typeof localStorage !== 'undefined' ? localStorage.getItem('stoat-activeChannelId') : null;
         const allChannels = ready.channels ?? [];
-        const first = (savedChannelId ? (allChannels.find(c => c._id === savedChannelId) ?? allChannels.find(c => c.channel_type === 'TextChannel')) : allChannels.find(c => c.channel_type === 'TextChannel'));
-        if (first) {
-          activeId.value = first._id;
-          activeName.value = first.name ?? '';
-          const { msgs, users } = await fetchMessages(first._id, token);
-          if (users.length) {
-            const n = { ...chatState.userNames };
-            for (const u of users) n[u._id] = u.display_name || u.username || u._id;
-            chatState.userNames = n;
-          }
-          messages.value = msgs;
-          if (msgs.length) { ackChannel(first._id, msgs[msgs.length - 1]._id, token); newMsgCount.value++; }
-        }
+        const first = savedChannelId
+          ? (allChannels.find(c => c._id === savedChannelId) ?? allChannels.find(c => c.channel_type === 'TextChannel' || c.channel_type === 'VoiceChannel'))
+          : allChannels.find(c => c.channel_type === 'TextChannel' || c.channel_type === 'VoiceChannel');
+        if (first) await switchToChannel(first, token, chatState, { activeId, activeName, messages, unreadChannels, newMsgCount });
         status.value = 'ready';
 
       } else if (evt.type === 'Message') {
         const msg = evt as WsMessage;
         if (msg.channel === activeId.value) {
           messages.value = [...messages.value, {
-            _id: msg._id,
-            content: msg.content,
-            author: msg.author,
-            channel: msg.channel,
-            attachments: msg.attachments,
-            replies: msg.replies,
-            createdAt: ulidToDate(msg._id),
-            edited: msg.edited ?? null,
+            _id: msg._id, content: msg.content, author: msg.author,
+            channel: msg.channel, attachments: msg.attachments, replies: msg.replies,
+            createdAt: ulidToDate(msg._id), edited: msg.edited ?? null,
           }];
           newMsgCount.value++;
-          // Auto-ack messages received while viewing the channel
           ackChannel(msg.channel, msg._id, token);
         } else {
-          // Mark background channel as having unread messages
           unreadChannels[msg.channel] = true;
         }
-        // Title ticker + browser notification when the tab is hidden
         if (msg.author !== chatState.currentUserId && document.hidden) {
           const senderName = chatState.userNames[msg.author] ?? 'Someone';
           const ch = channels.value.find(c => c._id === msg.channel);
           const isDM = ch?.channel_type === 'DirectMessage';
           const svName = !isDM && ch?.server
-            ? (servers.value.find(s => s._id === ch!.server)?.name ?? ch?.name)
-            : null;
+            ? (servers.value.find(s => s._id === ch!.server)?.name ?? ch?.name) : null;
           notifTitle.value = isDM
             ? `new message from ${senderName}`
             : `new message in ${svName ?? ch?.name ?? 'chat'}`;
           if ('Notification' in window && Notification.permission === 'granted') {
-            const body = msg.content?.slice(0, 100)
-              ?? (msg.attachments?.length ? '📎 Sent an attachment' : '…');
             try {
               const n = new Notification(senderName, {
-                body,
+                body: msg.content?.slice(0, 100) ?? (msg.attachments?.length ? '📎 Sent an attachment' : '…'),
                 icon: chatState.userAvatars[msg.author] ?? undefined,
-                tag: msg.channel, // collapse multiple messages from the same channel
+                tag: msg.channel,
               });
               n.onclick = () => window.focus();
-            } catch { /* unsupported context (e.g. Firefox private mode) */ }
+            } catch { /* unsupported context */ }
           }
         }
 
@@ -329,29 +190,24 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
 
       } else if (evt.type === 'ChannelAck') {
         const ack = evt as WsChannelAck;
-        if (ack.user === chatState.currentUserId) {
-          delete unreadChannels[ack.id];
-        }
+        if (ack.user === chatState.currentUserId) delete unreadChannels[ack.id];
 
       } else if (evt.type === 'MessageUpdate') {
         const upd = evt as WsMessageUpdate;
         if (upd.channel === activeId.value) {
-          messages.value = messages.value.map((m) =>
-            m._id === upd.id
-              ? { ...m, content: upd.data?.content ?? m.content, edited: upd.data?.edited ?? m.edited }
-              : m
+          messages.value = messages.value.map(m =>
+            m._id === upd.id ? { ...m, content: upd.data?.content ?? m.content, edited: upd.data?.edited ?? m.edited } : m
           );
         }
 
       } else if (evt.type === 'MessageDelete') {
         const del = evt as WsMessageDelete;
-        if (del.channel === activeId.value) {
-          messages.value = messages.value.filter((m) => m._id !== del.id);
-        }
+        if (del.channel === activeId.value) messages.value = messages.value.filter(m => m._id !== del.id);
+
       } else if (evt.type === 'MessageReact') {
         const r = evt as WsMessageReact;
         if (r.channel_id === activeId.value) {
-          messages.value = messages.value.map((m) => {
+          messages.value = messages.value.map(m => {
             if (m._id !== r.id) return m;
             const reactions = { ...(m.reactions ?? {}) };
             reactions[r.emoji_id] = [...(reactions[r.emoji_id] ?? []).filter(u => u !== r.user_id), r.user_id];
@@ -361,7 +217,7 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
       } else if (evt.type === 'MessageUnreact') {
         const r = evt as WsMessageUnreact;
         if (r.channel_id === activeId.value) {
-          messages.value = messages.value.map((m) => {
+          messages.value = messages.value.map(m => {
             if (m._id !== r.id) return m;
             const reactions = { ...(m.reactions ?? {}) };
             const users = (reactions[r.emoji_id] ?? []).filter(u => u !== r.user_id);
@@ -380,8 +236,39 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
         }
         const filtered = chatState.relations.filter(r => r._id !== rel.id);
         chatState.relations = rel.status !== 'None' && rel.status !== 'User'
-          ? [...filtered, { _id: rel.id, status: rel.status }]
-          : filtered;
+          ? [...filtered, { _id: rel.id, status: rel.status }] : filtered;
+
+      } else if (evt.type === 'VoiceChannelJoin') {
+        const v = evt as WsVoiceChannelJoin;
+        const uid = v.data.state.user_id;
+        chatState.voiceParticipants = {
+          ...chatState.voiceParticipants,
+          [uid]: v.data.state,
+        };
+
+      } else if (evt.type === 'VoiceChannelLeave') {
+        const v = evt as WsVoiceChannelLeave;
+        const uid2 = v.data.user_id;
+        const { [uid2]: _, ...rest } = chatState.voiceParticipants;
+        chatState.voiceParticipants = rest;
+
+      } else if (evt.type === 'VoiceChannelMove') {
+        const v = evt as WsVoiceChannelMove;
+        const uid3 = v.data.user_id;
+        const { [uid3]: _2, ...rest2 } = chatState.voiceParticipants;
+        chatState.voiceParticipants = {
+          ...rest2,
+          [uid3]: v.data.state,
+        };
+
+      } else if (evt.type === 'VoiceStateUpdate') {
+        const v = evt as WsVoiceStateUpdate;
+        const uid4 = v.data.user_id;
+        chatState.voiceParticipants = {
+          ...chatState.voiceParticipants,
+          [uid4]: v.data.state,
+        };
+
       } else if (evt.type === 'ChannelCreate') {
         const ch = evt as WsChannelCreate;
         if (!channels.value.some(c => c._id === ch._id)) {
@@ -393,29 +280,19 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
       }
     };
 
-    ws.onerror = () => {
-      status.value = 'error';
-    };
+    ws.onerror = () => { status.value = 'error'; };
 
-    cleanup(() => {
-      wsRef.value = null;
-      try { ws.close(); } catch { /* ignore */ }
-    });
+    cleanup(() => { wsRef.value = null; try { ws.close(); } catch { /* ignore */ } });
   });
 
-  // Switch to the server selected via the private-servers grid in the parent
+  // ── Switch to server via parent ────────────────────────────────────────
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(async ({ track }) => {
     const serverId = track(() => chatState.activeServerId);
     const currentStatus = track(() => status.value);
     if (!serverId || currentStatus !== 'ready') return;
 
-    // Try to find an already-loaded channel for this server.
-    // If not found, the server may have just been joined — fetch its channels now
-    // rather than waiting for the joinedServers sync task (registered later).
-    let ch = channels.value.find(
-      (c) => c.server === serverId && c.channel_type === 'TextChannel'
-    );
+    let ch = channels.value.find(c => c.server === serverId && (c.channel_type === 'TextChannel' || c.channel_type === 'VoiceChannel'));
     if (!ch) {
       if (!servers.value.some(s => s._id === serverId)) {
         const sv = chatState.joinedServers.find(s => s._id === serverId);
@@ -423,33 +300,15 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
       }
       const newChs = await fetchServerChannels(serverId, token);
       if (newChs.length) {
-        channels.value = [
-          ...channels.value,
-          ...newChs.filter(c => !channels.value.some(e => e._id === c._id)),
-        ];
-        ch = newChs.find(c => c.channel_type === 'TextChannel');
+        channels.value = [...channels.value, ...newChs.filter(c => !channels.value.some(e => e._id === c._id))];
+        ch = newChs.find(c => c.channel_type === 'TextChannel' || c.channel_type === 'VoiceChannel');
       }
     }
     if (!ch || ch._id === activeId.value) return;
-
-    activeId.value = ch._id;
-    activeName.value = ch.name ?? '';
-    messages.value = [];
-    const { msgs, users } = await fetchMessages(ch._id, token);
-    if (users.length) {
-      const n = { ...chatState.userNames };
-      for (const u of users) n[u._id] = u.display_name || u.username || u._id;
-      chatState.userNames = n;
-    }
-    messages.value = msgs;
-    if (msgs.length) {
-      ackChannel(ch._id, msgs[msgs.length - 1]._id, token);
-      delete unreadChannels[ch._id];
-    }
-    newMsgCount.value++;
+    await switchToChannel(ch, token, chatState, { activeId, activeName, messages, unreadChannels, newMsgCount });
   });
 
-  // Activate DM channel from parent (friends list click in index.tsx)
+  // ── Activate DM channel from parent ────────────────────────────────────
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(async ({ track }) => {
     const userId = track(() => chatState.activeDmUserId);
@@ -457,34 +316,17 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
     const currentStatus = track(() => status.value);
     if (!userId || currentStatus !== 'ready') return;
 
-    let dmCh = channels.value.find(
-      c => c.channel_type === 'DirectMessage' && c.recipients?.includes(userId)
-    );
+    let dmCh = channels.value.find(c => c.channel_type === 'DirectMessage' && c.recipients?.includes(userId));
     if (!dmCh) {
       const created = await openDMChannel(userId, token);
       if (!created) return;
       dmCh = created;
       channels.value = [...channels.value, created];
     }
-
-    activeId.value = dmCh._id;
-    activeName.value = chatState.userNames[userId] ?? 'Direct Message';
-    messages.value = [];
-    const { msgs: dmMsgs, users: dmUsers } = await fetchMessages(dmCh._id, token);
-    if (dmUsers.length) {
-      const n = { ...chatState.userNames };
-      for (const u of dmUsers) n[u._id] = u.display_name || u.username || u._id;
-      chatState.userNames = n;
-    }
-    messages.value = dmMsgs;
-    if (dmMsgs.length) {
-      ackChannel(dmCh._id, dmMsgs[dmMsgs.length - 1]._id, token);
-      delete unreadChannels[dmCh._id];
-    }
-    newMsgCount.value++;
+    await switchToChannel(dmCh, token, chatState, { activeId, activeName, messages, unreadChannels, newMsgCount });
   });
 
-  // Sync servers joined after the initial WS Ready (e.g. via invite from parent)
+  // ── Sync joined servers ────────────────────────────────────────────────
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(async ({ track }) => {
     const joinedCount = track(() => chatState.joinedServers.length);
@@ -496,16 +338,13 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
         servers.value = [...servers.value, sv];
         const newChs = await fetchServerChannels(sv._id, token);
         if (newChs.length) {
-          channels.value = [
-            ...channels.value,
-            ...newChs.filter(c => !channels.value.some(e => e._id === c._id)),
-          ];
+          channels.value = [...channels.value, ...newChs.filter(c => !channels.value.some(e => e._id === c._id))];
         }
       }
     }
   });
 
-  // Fetch server members when the active channel changes
+  // ── Fetch members on channel change ───────────────────────────────────
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(async ({ track }) => {
     const channelId = track(() => activeId.value);
@@ -519,7 +358,6 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
 
     membersServerId.value = serverId;
     const fetchedMembers = await fetchServerMembers(serverId, token);
-    // Cache avatars discovered from server member list
     if (fetchedMembers.length) {
       const avs = { ...chatState.userAvatars };
       for (const m of fetchedMembers) {
@@ -532,18 +370,15 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
     members.value = fetchedMembers;
   });
 
-  // Request notification permission; restore title and clear ticker when the tab regains focus
+  // ── Notification permission + title restore ────────────────────────────
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(({ cleanup }) => {
     if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => { /* permission denied */ });
+      Notification.requestPermission().catch(() => { });
     }
     const originalTitle = document.title;
     const clearNotif = () => {
-      if (!document.hidden) {
-        notifTitle.value = '';
-        document.title = originalTitle;
-      }
+      if (!document.hidden) { notifTitle.value = ''; document.title = originalTitle; }
     };
     document.addEventListener('visibilitychange', clearNotif);
     window.addEventListener('focus', clearNotif);
@@ -554,12 +389,11 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
     });
   });
 
-  // Scroll document title ticker while there is an unread notification
+  // ── Title ticker ───────────────────────────────────────────────────────
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(({ track, cleanup }) => {
     const title = track(() => notifTitle.value);
     if (!title) return;
-    // Build the scrolling string: "🔴 new message in Lab        " and rotate it
     const full = `${title}        `;
     let pos = 0;
     const id = setInterval(() => {
@@ -569,249 +403,47 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
     cleanup(() => clearInterval(id));
   });
 
-  // Save active channel to localStorage
+  // ── Save active channel ────────────────────────────────────────────────
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(({ track }) => {
     const id = track(() => activeId.value);
     if (id) localStorage.setItem('stoat-activeChannelId', id);
   });
 
-  // Collapse sidebars when component is narrower than 700px
+  // ── Collapse sidebars on narrow width ──────────────────────────────────
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(({ track, cleanup }) => {
     const el = track(() => outerRef.value);
     if (!el) return;
-    const check = () => {
-      if (el.clientWidth < 700) {
-        leftOpen.value = false;
-        rightOpen.value = false;
-      }
-    };
+    const check = () => { if (el.clientWidth < 700) { leftOpen.value = false; rightOpen.value = false; } };
     check();
     const ro = new ResizeObserver(check);
     ro.observe(el);
     cleanup(() => ro.disconnect());
   });
 
-  // Native drag counter for reliable drag-over visual feedback
-  // eslint-disable-next-line qwik/no-use-visible-task
-  useVisibleTask$(({ track, cleanup }) => {
-    const el = track(() => mainPanelRef.value);
-    if (!el) return;
-    let counter = 0;
-    const onEnter = () => { counter++; isDragOver.value = true; };
-    const onLeave = () => { if (--counter <= 0) { counter = 0; isDragOver.value = false; } };
-    const onDrop  = () => { counter = 0; isDragOver.value = false; };
-    el.addEventListener('dragenter', onEnter);
-    el.addEventListener('dragleave', onLeave);
-    el.addEventListener('drop',      onDrop);
-    cleanup(() => {
-      el.removeEventListener('dragenter', onEnter);
-      el.removeEventListener('dragleave', onLeave);
-      el.removeEventListener('drop',      onDrop);
-    });
-  });
-
-  // ── Render ──────────────────────────────────────────────────────────────────
-
+  // ── Render ────────────────────────────────────────────────────────────
   return (
     <div ref={outerRef} class="relative flex h-[90vh] overflow-hidden bg-(--color-surface) rounded-lg">
-
-      {/* ── Left sidebar toggle ── */}
-      <button
-        class="absolute top-2.75 left-30 z-40 p-1 rounded hover:bg-(--color-canvas) text-muted hover:text-ink cursor-pointer transition-colors duration-200"
-        onClick$={() => { leftOpen.value = !leftOpen.value; }}
-        title={leftOpen.value ? 'Collapse sidebar' : 'Expand sidebar'}
-      >
-        <LuChevronLeft class={`h-4 w-4${leftOpen.value ? '' : ' rotate-180'}`} />
-      </button>
-
-      {/* ── Right sidebar toggle ── */}
-      {status.value === 'ready' && membersServerId.value && (
-        <button
-          class="absolute top-2.75 right-2 z-40 p-1 rounded hover:bg-(--color-canvas) text-muted hover:text-ink cursor-pointer transition-colors duration-200"
-          onClick$={() => { rightOpen.value = !rightOpen.value; }}
-          title={rightOpen.value ? 'Collapse members' : 'Expand members'}
-        >
-          <LuChevronLeft class={`h-4 w-4${!rightOpen.value ? '' : ' rotate-180'}`} />
-        </button>
-      )}
-
-      {/* ── Sidebar: server + channel list ── */}
-      {leftOpen.value && <aside class="w-[150px] shrink-0 border-r border-(--color-rim) overflow-y-auto py-2">
-        {status.value === 'connecting' && (
-          <p class="px-3 py-2 text-xs text-muted italic">Connecting…</p>
-        )}
-
-        {status.value === 'ready' && servers.value.length === 0 && (
-          <p class="px-3 py-2 text-xs text-muted italic">No servers joined.</p>
-        )}
-
-        {servers.value.map((sv) => (
-          <div key={sv._id} class="mb-2">
-            <p class="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-muted truncate">
-              {sv.name}
-            </p>
-            {channels.value
-              .filter((c) => c.server === sv._id && c.channel_type === 'TextChannel')
-              .map((ch) => (
-                <button
-                  key={ch._id}
-                  class={[
-                    'w-full text-left px-2 py-1.5 text-sm transition-colors leading-tight flex items-center gap-1',
-                    activeId.value === ch._id
-                      ? 'bg-(--color-edge)/50 text-ink font-medium'
-                      : 'text-muted hover:text-ink hover:bg-(--color-edge) cursor-pointer',
-                  ].join(' ')}
-                  onClick$={async () => {
-                    if (activeId.value === ch._id) return;
-                    activeId.value = ch._id;
-                    activeName.value = ch.name ?? '';
-                    messages.value = [];
-                    const { msgs, users } = await fetchMessages(ch._id, token);
-                    if (users.length) {
-                      const n = { ...chatState.userNames };
-                      for (const u of users) n[u._id] = u.display_name || u.username || u._id;
-                      chatState.userNames = n;
-                    }
-                    messages.value = msgs;
-                    if (msgs.length) {
-                      ackChannel(ch._id, msgs[msgs.length - 1]._id, token);
-                      delete unreadChannels[ch._id];
-                    }
-                    newMsgCount.value++;
-                  }}
-                >
-                  <span class="flex-1 truncate"># {ch.name}</span>
-                  {unreadChannels[ch._id] && <span class="shrink-0 w-1.5 h-1.5 rounded-full bg-green-400" />}
-                </button>
-              ))}
-          </div>
-        ))}
-
-        {/* DM channels */}
-        {channels.value.some(c => c.channel_type === 'DirectMessage') && (
-          <div class="mb-2 mt-2 border-t border-(--color-rim) pt-2">
-            <p class="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-muted truncate">Direct Messages</p>
-            {channels.value
-              .filter(c => c.channel_type === 'DirectMessage')
-              .map(ch => {
-                const otherId = ch.recipients?.find(id => id !== chatState.currentUserId) ?? ch.recipients?.[0] ?? '';
-                const name = chatState.userNames[otherId] ?? 'DM';
-                const av = chatState.userAvatars[otherId];
-                return (
-                  <button
-                    key={ch._id}
-                    class={[
-                      'w-full text-left px-2 py-1.5 text-sm truncate transition-colors leading-tight flex items-center gap-2',
-                      activeId.value === ch._id
-                        ? 'bg-(--color-edge)/50 text-ink font-medium'
-                        : 'text-muted hover:text-ink hover:bg-(--color-edge) cursor-pointer',
-                    ].join(' ')}
-                    onClick$={async () => {
-                      if (activeId.value === ch._id) return;
-                      activeId.value = ch._id;
-                      activeName.value = name;
-                      messages.value = [];
-                      const { msgs, users } = await fetchMessages(ch._id, token);
-                      if (users.length) {
-                        const n = { ...chatState.userNames };
-                        for (const u of users) n[u._id] = u.display_name || u.username || u._id;
-                        chatState.userNames = n;
-                      }
-                      messages.value = msgs;
-                      if (msgs.length) {
-                        ackChannel(ch._id, msgs[msgs.length - 1]._id, token);
-                        delete unreadChannels[ch._id];
-                      }
-                      newMsgCount.value++;
-                    }}
-                  >
-                    <span class="shrink-0 w-5 h-5 rounded-full overflow-hidden bg-(--color-surface) border border-(--color-rim) flex items-center justify-center">
-                      {av
-                        ? <img src={av} alt={name} class="w-full h-full object-cover" />
-                        : <LuUser class="h-3 w-3 text-muted" />}
-                    </span>
-                    <span class="truncate">@ {name}</span>
-                    {unreadChannels[ch._id] && <span class="shrink-0 ml-auto w-1.5 h-1.5 rounded-full bg-green-400" />}
-                  </button>
-                );
-              })}
-          </div>
-        )}
-
-        {/* Outgoing friend requests */}
-        {chatState.relations.some(r => r.status === 'Outgoing') && (
-          <div class="mb-2 mt-2 border-t border-(--color-rim) pt-2">
-            <p class="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-muted truncate">Pending</p>
-            {chatState.relations.filter(r => r.status === 'Outgoing').map(rel => (
-              <div key={rel._id} class="flex items-center gap-2 px-3 py-1.5">
-                <span class="shrink-0 w-2 h-2 rounded-full bg-gray-500" />
-                <span class="flex-1 text-xs text-muted truncate italic">{chatState.userNames[rel._id] ?? rel._id}</span>
-                <span title="Request sent"><LuClock class="shrink-0 h-3 w-3 text-muted opacity-60" /></span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Incoming friend requests */}
-        {chatState.relations.some(r => r.status === 'Incoming') && (
-          <div class="mb-2 mt-2 border-t border-(--color-rim) pt-2">
-            <p class="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-muted truncate">Requests</p>
-            {chatState.relations.filter(r => r.status === 'Incoming').map(rel => (
-              <button
-                key={rel._id}
-                class="w-full text-left px-3 py-1.5 text-xs text-muted hover:text-ink hover:bg-(--color-edge) transition-colors cursor-pointer"
-                onClick$={async () => {
-                  const ok = await acceptFriendRequest(rel._id, token);
-                  if (ok) {
-                    chatState.relations = chatState.relations.map(r =>
-                      r._id === rel._id ? { ...r, status: 'Friend' as const } : r
-                    );
-                    chatState.activeDmUserId = rel._id;
-                    chatState.activeDmSeq = (chatState.activeDmSeq ?? 0) + 1;
-                  }
-                }}
-              >
-                ✓ {chatState.userNames[rel._id] ?? rel._id}
-              </button>
-            ))}
-          </div>
-        )}
-      </aside>}
+      {/* ── Left sidebar ── */}
+      <ChatSidebarLeft
+        status={status.value}
+        chatState={chatState}
+        servers={servers.value}
+        channels={channels.value}
+        activeId={activeId.value}
+        unreadChannels={unreadChannels}
+        token={token}
+        onActivate={activateChannel}
+        leftOpen={leftOpen.value}
+        onToggle={$(() => { leftOpen.value = !leftOpen.value; })}
+      />
 
       {/* ── Main panel ── */}
       <div
         ref={mainPanelRef}
         class="flex-1 flex flex-col min-w-0 relative"
-        preventdefault:dragover
-        preventdefault:drop
-        onDrop$={async (e) => {
-          if (status.value !== 'ready') return;
-          const files = Array.from((e as DragEvent).dataTransfer?.files ?? []);
-          if (!files.length || !token) return;
-          fileUploading.value = true;
-          for (const file of files) {
-            const id = await uploadAttachment(file, token);
-            if (id) {
-              pendingAttachmentIds.value = [...pendingAttachmentIds.value, id];
-              pendingAttachmentPreviews.value = [...pendingAttachmentPreviews.value, {
-                id, name: file.name, isImage: file.type.startsWith('image/'),
-                url: URL.createObjectURL(file),
-              }];
-            }
-          }
-          fileUploading.value = false;
-        }}
       >
-        {/* Drag-and-drop overlay */}
-        {isDragOver.value && status.value === 'ready' && (
-          <div class="absolute inset-0 z-50 bg-(--color-accent)/10 border-2 border-dashed border-(--color-accent) rounded-r-lg flex flex-col items-center justify-center pointer-events-none">
-            <LuUpload class="h-12 w-12 text-(--color-accent) mb-3" />
-            <p class="text-(--color-accent) font-semibold text-lg">Drop files to upload</p>
-            <p class="text-(--color-accent)/70 text-sm mt-1">Images and files supported</p>
-          </div>
-        )}
 
         {status.value === 'connecting' && (
           <div class="flex-1 flex items-center justify-center">
@@ -829,404 +461,141 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
           <>
             {/* Channel header */}
             <header class="shrink-0 h-11 px-4 flex items-center gap-2 border-b border-(--color-edge)">
-              <span class="text-muted font-mono text-sm">#</span>
+              {isVoiceChannel(activeId.value) ? (
+                <LuHeadphones class="shrink-0 h-3.5 w-3.5" />
+              ) : (
+                  <span class="text-muted font-mono text-sm">#</span>
+              )}
               <span class="text-ink font-semibold text-sm">{activeName.value || 'general'}</span>
             </header>
 
-            {/* Message list */}
-            <div
-              ref={msgsEl}
-              class="flex-1 overflow-y-auto mini-scroll p-4 flex flex-col gap-2"
-            >
-              {messages.value.length === 0 && (
-                <p class="text-muted text-sm italic">No messages yet.</p>
-              )}
-              {messages.value.map((msg, idx) => {
-                const prev = idx > 0 ? messages.value[idx - 1] : null;
-                const isGrouped = !!(prev && prev.author === msg.author &&
-                  (msg.createdAt.getTime() - prev.createdAt.getTime()) < 120_000);
-                return (
-                  <div key={msg._id} class={`group/msg relative hover:bg-(--color-edge)/10 rounded-md px-1 -mx-1 pt-0.5 ${isGrouped ? '-mt-3' : ''}`}>
-
-                  {/* Hover action toolbar */}
-                  <div class="absolute right-1 -top-3 hidden group-hover/msg:flex items-center gap-0.5 bg-(--color-surface) border border-(--color-rim) rounded-lg px-1.5 py-1 shadow-md z-20">
-                    <button class="p-1 rounded hover:bg-(--color-edge) text-muted hover:text-ink transition-colors cursor-pointer" title="React with emoji"
-                      onClick$={() => { emojiPickerFor.value = emojiPickerFor.value === msg._id ? '' : msg._id; }}>
-                      <LuSmile class="h-3.5 w-3.5" />
-                    </button>
-                    <button class="p-1 rounded hover:bg-(--color-edge) text-muted hover:text-ink transition-colors cursor-pointer" title="Reply"
-                      onClick$={() => { replyTo.value = msg; emojiPickerFor.value = ''; }}>
-                      <LuReply class="h-3.5 w-3.5" />
-                    </button>
-                    {msg.author === chatState.currentUserId && (
-                      <>
-                        <button class="p-1 rounded hover:bg-(--color-edge) text-muted hover:text-ink transition-colors cursor-pointer" title="Edit"
-                          onClick$={() => { editingMsgId.value = msg._id; editingContent.value = msg.content ?? ''; emojiPickerFor.value = ''; }}>
-                          <LuPencil class="h-3.5 w-3.5" />
-                        </button>
-                        <button class="p-1 rounded hover:bg-(--color-edge) text-red-400/70 hover:text-red-400 transition-colors cursor-pointer" title="Delete"
-                          onClick$={async () => { await deleteMessage(activeId.value, msg._id, token); }}>
-                          <LuTrash2 class="h-3.5 w-3.5" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Emoji picker popover */}
-                  {emojiPickerFor.value === msg._id && (
-                    <div class="absolute right-1 top-5 z-30 bg-(--color-surface) border border-(--color-rim) rounded-xl p-2 shadow-xl max-w-[220px]">
-                      <div class="flex flex-wrap gap-1 pb-1">
-                        {QUICK_EMOJI.map(e => (
-                          <button key={e} class="p-1 rounded hover:bg-(--color-edge) text-xl leading-none cursor-pointer" onClick$={async () => {
-                            emojiPickerFor.value = '';
-                            await reactToMessage(activeId.value, msg._id, e, token);
-                          }}>{e}</button>
-                        ))}
-                      </div>
-                      {Object.keys(chatState.serverEmojis).length > 0 && (
-                        <div class="flex flex-wrap gap-1 border-t border-(--color-rim) pt-1">
-                          {Object.values(chatState.serverEmojis).slice(0, 24).map(e => (
-                            <button key={e._id} class="p-0.5 rounded hover:bg-(--color-edge) cursor-pointer" title={e.name} onClick$={async () => {
-                              emojiPickerFor.value = '';
-                              await reactToMessage(activeId.value, msg._id, e._id, token);
-                            }}>
-                              <img src={`${STOAT_AUTUMN}/emojis/${e._id}`} alt={e.name} class="h-6 w-6" />
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Reply reference */}
-                  {(msg.replies?.length ?? 0) > 0 && (
-                    <div class="flex items-center gap-1 ml-2 mb-0.5 text-xs text-muted">
-                      <LuReply class="h-3 w-3 shrink-0 opacity-50 scale-x-[-1]" />
-                      <span class="italic truncate">
-                        {(() => {
-                          const ref = messages.value.find(m => m._id === msg.replies![0]);
-                          const refAuthor = ref ? (chatState.userNames[ref.author] ?? 'Unknown') : 'Unknown';
-                          const refPreview = ref?.content?.slice(0, 60) ?? (ref?.attachments?.length ? '[attachment]' : '…');
-                          return `${refAuthor}: ${refPreview}`;
-                        })()}
-                      </span>
-                    </div>
-                  )}
-
-                    {/* Author — hidden for consecutive messages from the same person within 2 min */}
-                    {!isGrouped && (
-                      <div class="text-xs font-semibold text-(--color-accent-muted) mb-0.5 flex items-end gap-2">
-                        <span>{chatState.userNames[msg.author] ?? msg.author}</span>
-                        <span class="text-[10px] font-normal text-muted/60">{formatTime(msg.createdAt)}</span>
-                        {msg.edited && <span class="text-[10px] font-normal text-muted/40 italic">(edited)</span>}
-                      </div>
-                    )}
-
-                  {/* Content — edit mode or normal */}
-                  {editingMsgId.value === msg._id ? (
-                    <div class="flex items-center gap-2 mb-1">
-                      <input
-                        class="flex-1 rounded px-2 py-1 text-sm bg-(--color-edge) text-ink border border-(--color-rim) focus:outline-none"
-                        value={editingContent.value}
-                        onInput$={(_, el) => editingContent.value = el.value}
-                        onKeyDown$={async (e) => {
-                          if (e.key === 'Escape') { editingMsgId.value = ''; return; }
-                          if (e.key !== 'Enter' || e.shiftKey) return;
-                          const newContent = editingContent.value.trim();
-                          if (!newContent) return;
-                          const ok = await editMessage(activeId.value, msg._id, newContent, token);
-                          if (ok) messages.value = messages.value.map(m => m._id === msg._id ? { ...m, content: newContent } : m);
-                          editingMsgId.value = '';
-                        }}
-                      />
-                      <button class="text-xs text-muted hover:text-ink shrink-0" onClick$={() => { editingMsgId.value = ''; }}>
-                        <LuX class="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                        <MarkdownMessage
-                          content={msg.content ?? ''}
-                          serverEmojis={chatState.serverEmojis}
-                          emojiOnly={isEmojiOnly(msg.content ?? '')}
-                        />
-                  )}
-
-                  {/* Attachments */}
-                  {(msg.attachments?.length ?? 0) > 0 && (
-                    <div class="mt-1 flex flex-wrap gap-2">
-                      {msg.attachments!.map(att => (
-                        att.metadata?.type === 'Image' ? (
-                          <img
-                            key={att._id}
-                            src={`${STOAT_AUTUMN}/attachments/${att._id}`}
-                            alt={att.filename ?? 'Image'}
-                            class="max-w-[300px] max-h-[220px] rounded-lg object-contain border border-(--color-rim) cursor-pointer"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <a
-                            key={att._id}
-                            href={`${STOAT_AUTUMN}/attachments/${att._id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="flex items-center gap-2 px-3 py-2 rounded-lg bg-(--color-edge) border border-(--color-rim) text-xs text-ink hover:bg-(--color-canvas) transition-colors"
-                          >
-                            📎 {att.filename ?? 'File'}{att.size ? ` (${Math.round(att.size / 1024)}KB)` : ''}
-                          </a>
-                        )
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Reactions */}
-                  {msg.reactions && Object.keys(msg.reactions).length > 0 && (
-                    <div class="flex flex-wrap gap-1 mt-1.5 mb-0.5">
-                      {Object.entries(msg.reactions).map(([emojiId, userIds]) => {
-                        const mine = userIds.includes(chatState.currentUserId);
-                        const isCustomEmoji = /^[0-9A-Z]{26}$/.test(emojiId);
-                        return (
-                          <button
-                            key={emojiId}
-                            class={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border transition-colors cursor-pointer ${
-                              mine
-                                ? 'bg-(--color-accent-muted)/15 border-(--color-accent-muted)/40 text-ink'
-                                : 'bg-(--color-edge)/60 border-(--color-rim) text-muted hover:text-ink hover:bg-(--color-edge)'
-                            }`}
-                            onClick$={async () => {
-                              if (mine) await unreactFromMessage(activeId.value, msg._id, emojiId, token);
-                              else await reactToMessage(activeId.value, msg._id, emojiId, token);
-                            }}
-                          >
-                            {isCustomEmoji
-                              ? <img src={`${STOAT_AUTUMN}/emojis/${emojiId}`} alt={emojiId} class="h-3.5 w-3.5" />
-                              : <span class="leading-none">{emojiId}</span>
-                            }
-                            <span>{userIds.length}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
+            {isVoiceChannel(activeId.value) ? (
+              /* ── Voice layout: split top half (voice) / bottom half (chat) ── */
+              <div class="flex-1 flex flex-col min-h-0 relative">
+                {/* Voice panel — top half */}
+                <div class="min-h-0 border-b border-(--color-rim)">
+                  <VoicePanel
+                    channelId={activeId.value}
+                    channelName={activeName.value}
+                    chatState={chatState}
+                    token={token}
+                    onToggleConnect={$(() => {
+                      if (voiceConnected.value) {
+                        voiceConnected.value = false;
+                        chatState.activeVoiceChannelId = '';
+                      } else {
+                        voiceConnected.value = true;
+                        chatState.activeVoiceChannelId = activeId.value;
+                      }
+                    })}
+                  />
                 </div>
-                );
-              })}
-              {/* Sentinel element for scroll anchoring */}
-              <div ref={bottomSentinelRef} />
-            </div>
-            
 
-            {/* Typing indicator */}
-            <div class="max-h-0">
-            {(typingByChannel[activeId.value] ?? []).length > 0 && (
-              <div class="shrink-0 px-4 py-1 text-xs text-muted italic select-none relative -mt-6">
-                {(() => {
-                  const names = (typingByChannel[activeId.value] ?? []).map(uid => chatState.userNames[uid] ?? 'Someone');
-                  if (names.length === 1) return `${names[0]} is typing…`;
-                  if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
-                  return `${names.length} people are typing…`;
-                })()}
+                {/* Message list — bottom half */}
+                <div class="flex-1 flex flex-col min-h-0">
+                  <ChatMessageList
+                    chatState={chatState}
+                    messages={messages.value}
+                    activeId={activeId.value}
+                    token={token}
+                    editingMsgId={editingMsgId.value}
+                    editingContent={editingContent.value}
+                    emojiPickerFor={emojiPickerFor.value}
+                    onSetEditingMsgId={$((id: string) => { editingMsgId.value = id; })}
+                    onSetEditingContent={$((c: string) => { editingContent.value = c; })}
+                    onSetEmojiPickerFor={$((id: string) => { emojiPickerFor.value = id; })}
+                    onSetReplyTo={$((msg: StoatMsg | null) => { replyTo.value = msg; })}
+                    onMessagesUpdated={$((msgs: StoatMsg[]) => { messages.value = msgs; })}
+                  />
+                  <ChatInput
+                    chatState={chatState}
+                    activeId={activeId.value}
+                    activeName={activeName.value}
+                    sending={sending.value}
+                    replyTo={replyTo.value}
+                    token={token}
+                    onSetReplyTo={$((msg: StoatMsg | null) => { replyTo.value = msg; })}
+                    onSend={$(async (text: string, chId: string, replyMsg: StoatMsg | null, attIds: string[]) => {
+                      sending.value = true;
+                      try {
+                        await sendMessage(chId, text, token, {
+                          attachments: attIds.length ? attIds : undefined,
+                          replies: replyMsg ? [{ id: replyMsg._id, mention: false }] : undefined,
+                        });
+                      } finally {
+                        sending.value = false;
+                      }
+                    })}
+                    onTyping={$((chId: string, isEnding: boolean) => {
+                      if (isEnding) {
+                        wsRef.value?.send(JSON.stringify({ type: 'EndTyping', channel: chId }));
+                      } else {
+                        wsRef.value?.send(JSON.stringify({ type: 'BeginTyping', channel: chId }));
+                      }
+                    })}
+                  />
+                </div>
               </div>
-              )}
-              </div>
-
-            {/* Attachment previews */}
-            {pendingAttachmentPreviews.value.length > 0 && (
-              <div class="shrink-0 px-4 pt-2 flex flex-wrap gap-2 border-t border-(--color-rim)/50">
-                {pendingAttachmentPreviews.value.map((att, i) => (
-                  <div key={att.id} class="relative">
-                    {att.isImage ? (
-                      <img src={att.url} alt={att.name} class="h-16 w-16 rounded-md object-cover border border-(--color-rim)" />
-                    ) : (
-                      <div class="h-12 px-3 flex items-center gap-2 rounded-md bg-(--color-edge) border border-(--color-rim) text-xs text-ink max-w-[120px]">
-                        📎 <span class="truncate">{att.name}</span>
-                      </div>
-                    )}
-                    <button
-                      class="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center"
-                      onClick$={() => {
-                        pendingAttachmentIds.value = pendingAttachmentIds.value.filter((_, j) => j !== i);
-                        pendingAttachmentPreviews.value = pendingAttachmentPreviews.value.filter((_, j) => j !== i);
-                      }}
-                    ><LuX class="h-2.5 w-2.5" /></button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Reply bar */}
-            {replyTo.value && (
-              <div class="shrink-0 px-4 py-1.5 border-t border-(--color-rim)/50 flex items-center gap-2 text-xs">
-                <LuReply class="h-3.5 w-3.5 shrink-0 text-muted" />
-                <span class="text-muted">Replying to</span>
-                <span class="font-semibold text-ink">{chatState.userNames[replyTo.value.author] ?? replyTo.value.author}</span>
-                <span class="flex-1 truncate text-muted italic">"{replyTo.value.content?.slice(0, 60) ?? ''}"</span>
-                <button class="shrink-0 ml-auto text-muted hover:text-ink transition-colors" title="Cancel reply"
-                  onClick$={() => { replyTo.value = null; }}>
-                  <LuX class="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
-
-            {/* Send input */}
-            <div class="shrink-0 flex border-t border-(--color-rim) border-dashed">
-              <label class={`shrink-0 px-3 flex items-center cursor-pointer transition-colors ${fileUploading.value ? 'opacity-40 pointer-events-none text-muted' : 'text-muted hover:text-ink'}`} title="Attach file">
-                <LuPaperclip class="h-4 w-4" />
-                <input type="file" class="sr-only" multiple onChange$={async (_, el) => {
-                  const files = Array.from(el.files ?? []);
-                  if (!files.length || !token) return;
-                  fileUploading.value = true;
-                  for (const file of files) {
-                    const id = await uploadAttachment(file, token);
-                    if (id) {
-                      pendingAttachmentIds.value = [...pendingAttachmentIds.value, id];
-                      pendingAttachmentPreviews.value = [...pendingAttachmentPreviews.value, {
-                        id, name: file.name, isImage: file.type.startsWith('image/'),
-                        url: URL.createObjectURL(file),
-                      }];
-                    }
-                  }
-                  fileUploading.value = false;
-                  el.value = '';
-                }} />
-              </label>
-              <textarea
-                rows={1}
-                placeholder={`Message #${activeName.value || 'general'}…`}
-
-                class={input_style + " -mr-[2px]"}
-                value={inputText.value}
-                onInput$={(_, el) => {
-                  inputText.value = el.value;
-                  // Auto-resize
-                  el.style.height = 'auto';
-                  el.style.height = Math.min(el.scrollHeight, 160) + 'px';
-                  const ws = wsRef.value;
-                  const chId = activeId.value;
-                  if (ws && chId) {
-                    ws.send(JSON.stringify({ type: 'BeginTyping', channel: chId }));
-                    if (typingTimeoutId.value !== null) clearTimeout(typingTimeoutId.value);
-                    typingTimeoutId.value = setTimeout(() => {
+            ) : (
+              /* ── Text-only layout ── */
+              <>
+                <ChatMessageList
+                  chatState={chatState}
+                  messages={messages.value}
+                  activeId={activeId.value}
+                  token={token}
+                  editingMsgId={editingMsgId.value}
+                  editingContent={editingContent.value}
+                  emojiPickerFor={emojiPickerFor.value}
+                  onSetEditingMsgId={$((id: string) => { editingMsgId.value = id; })}
+                  onSetEditingContent={$((c: string) => { editingContent.value = c; })}
+                  onSetEmojiPickerFor={$((id: string) => { emojiPickerFor.value = id; })}
+                  onSetReplyTo={$((msg: StoatMsg | null) => { replyTo.value = msg; })}
+                  onMessagesUpdated={$((msgs: StoatMsg[]) => { messages.value = msgs; })}
+                />
+                  <ChatInput
+                    chatState={chatState}
+                    activeId={activeId.value}
+                    activeName={activeName.value}
+                    sending={sending.value}
+                    replyTo={replyTo.value}
+                    token={token}
+                    onSetReplyTo={$((msg: StoatMsg | null) => { replyTo.value = msg; })}
+                    onSend={$(async (text: string, chId: string, replyMsg: StoatMsg | null, attIds: string[]) => {
+                      sending.value = true;
+                      try {
+                        await sendMessage(chId, text, token, {
+                          attachments: attIds.length ? attIds : undefined,
+                          replies: replyMsg ? [{ id: replyMsg._id, mention: false }] : undefined,
+                        });
+                      } finally {
+                        sending.value = false;
+                      }
+                    })}
+                  onTyping={$((chId: string, isEnding: boolean) => {
+                    if (isEnding) {
                       wsRef.value?.send(JSON.stringify({ type: 'EndTyping', channel: chId }));
-                      typingTimeoutId.value = null;
-                    }, 2500) as unknown as ReturnType<typeof setTimeout>;
-                  }
-                }}
-                onKeyDown$={async (e, el) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    if (sending.value) return;
-                    const content = inputText.value.trim();
-                    if ((!content && !pendingAttachmentIds.value.length) || !activeId.value) return;
-                    inputText.value = '';
-                    sending.value = true;
-                    if (typingTimeoutId.value !== null) { clearTimeout(typingTimeoutId.value); typingTimeoutId.value = null; }
-                    wsRef.value?.send(JSON.stringify({ type: 'EndTyping', channel: activeId.value }));
-                    const attIds = [...pendingAttachmentIds.value];
-                    const replyMsg = replyTo.value;
-                    pendingAttachmentIds.value = [];
-                    pendingAttachmentPreviews.value = [];
-                    replyTo.value = null;
-                    // Reset textarea height
-                    el.style.height = 'auto';
-                    try {
-                      await sendMessage(activeId.value, content, token, {
-                        attachments: attIds.length ? attIds : undefined,
-                        replies: replyMsg ? [{ id: replyMsg._id, mention: false }] : undefined,
-                      });
-                    } finally {
-                      sending.value = false;
+                    } else {
+                      wsRef.value?.send(JSON.stringify({ type: 'BeginTyping', channel: chId }));
                     }
-                  }
-                }}
-              />
-              <div class="bg-(--color-rim) w-[1px] h-[65%] self-center relative z-20" />
-              <button
-                class="shrink-0 text-sm px-8 py-4 disabled:opacity-40 disabled:pointer-events-none cursor-pointer hover:bg-(--color-canvas) transition-colors -ml-[2px] "
-                disabled={sending.value}
-                onClick$={async () => {
-                  const content = inputText.value.trim();
-                  if ((!content && !pendingAttachmentIds.value.length) || !activeId.value || sending.value) return;
-                  inputText.value = '';
-                  sending.value = true;
-                  if (typingTimeoutId.value !== null) { clearTimeout(typingTimeoutId.value); typingTimeoutId.value = null; }
-                  wsRef.value?.send(JSON.stringify({ type: 'EndTyping', channel: activeId.value }));
-                  const attIds = [...pendingAttachmentIds.value];
-                  const replyMsg = replyTo.value;
-                  pendingAttachmentIds.value = [];
-                  pendingAttachmentPreviews.value = [];
-                  replyTo.value = null;
-                  try {
-                    await sendMessage(activeId.value, content, token, {
-                      attachments: attIds.length ? attIds : undefined,
-                      replies: replyMsg ? [{ id: replyMsg._id, mention: false }] : undefined,
-                    });
-                  } finally {
-                    sending.value = false;
-                  }
-                }}
-              >
-                Send
-              </button>
-            </div>
+                  })}
+                />
+              </>
+            )}
           </>
         )}
-
       </div>
 
-      {/* Right sidebar: server members */}
-      {status.value === 'ready' && membersServerId.value && rightOpen.value && (
-        <aside class="w-[150px] shrink-0 border-l border-(--color-rim) overflow-y-auto py-2">
-          <p class="px-3 pt-2 pb-3 text-[10px] font-bold uppercase tracking-widest text-muted">
-            Members — {members.value.length}
-          </p>
-          {members.value.map(m => {
-            const uid = m._id.user;
-            const name = m.nickname || m.display_name || m.username || uid;
-            const rel = chatState.relations.find(r => r._id === uid);
-            const isFriend = rel?.status === 'Friend';
-            const isPending = rel?.status === 'Outgoing';
-            const usernameHash = m.discriminator
-              ? `${m.username}#${m.discriminator}`
-              : (m.username ?? '');
-            const memberAv = chatState.userAvatars[uid] ?? avatarUrl(m.avatar ?? m.userAvatar);
-            return (
-              <div key={uid} class="group relative flex items-center gap-2 px-3 py-1.5 hover:bg-(--color-edge)/30 transition-colors">
-                <span class={`shrink-0 w-2 h-2 rounded-full ${presenceColor(m.status?.presence)}`} />
-                <span class="flex-1 text-xs text-ink truncate">{name}</span>
-                {!isFriend && !isPending && usernameHash && (
-                  <button
-                    class="shrink-0 text-muted hover:text-ink transition-colors opacity-0 group-hover:opacity-100"
-                    title={`Send friend request to ${name}`}
-                    onClick$={async () => {
-                      const ok = await sendFriendRequest(usernameHash, token);
-                      if (ok) chatState.relations = [...chatState.relations, { _id: uid, status: 'Outgoing' }];
-                    }}
-                  >
-                    <LuUserPlus class="h-3 w-3" />
-                  </button>
-                )}
-                {isPending && <span title="Request sent"><LuClock class="shrink-0 h-3 w-3 text-muted opacity-60" /></span>}
-                {isFriend && <span title="Friends"><LuUserCheck class="shrink-0 h-3 w-3 text-muted opacity-60" /></span>}
-
-                {/* Hover popup — floats to the left over the main panel */}
-                <div class="hidden group-hover:flex absolute right-full mr-2 top-1/2 -translate-y-1/2 z-50 flex-col items-center gap-2 bg-(--color-canvas) border border-(--color-rim) rounded-lg p-3 shadow-xl w-40 pointer-events-none">
-                  <div class="shrink-0 w-12 h-12 rounded-full overflow-hidden border border-(--color-rim) bg-(--color-surface) flex items-center justify-center">
-                    {memberAv
-                      ? <img src={memberAv} alt={name} class="w-full h-full object-cover" />
-                      : <LuUser class="h-6 w-6 text-muted" />}
-                  </div>
-                  <p class="text-xs font-semibold text-ink text-center truncate w-full">{name}</p>
-                  {m.username && (
-                    <p class="text-xs text-muted text-center -mt-1">@{m.username}{m.discriminator ? `#${m.discriminator}` : ''}</p>
-                  )}
-                  {m.status?.text && (
-                    <p class="text-xs text-muted text-center truncate w-full italic">{m.status.text}</p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </aside>
+      {/* ── Right sidebar ── */}
+      {status.value === 'ready' && membersServerId.value && (
+        <ChatSidebarRight
+          chatState={chatState}
+          members={members.value}
+          membersCount={members.value.length}
+          rightOpen={rightOpen.value}
+          token={token}
+          onToggle={$(() => { rightOpen.value = !rightOpen.value; })}
+        />
       )}
     </div>
   );
