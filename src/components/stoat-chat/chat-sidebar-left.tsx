@@ -110,7 +110,7 @@ export const ChatSidebarLeft = component$<ChatSidebarLeftProps>(
                                   {/* Avatar */}
                                   <span class="shrink-0 w-4 h-4 rounded-full overflow-hidden bg-(--color-surface) border border-(--color-rim) flex items-center justify-center">
                                     {av
-                                      ? <img src={av} alt={name} class="w-full h-full object-cover" />
+                                      ? <img src={av} alt={name} width="16" height="16" class="w-full h-full object-cover" />
                                       : <LuUser class="h-2.5 w-2.5 text-muted" />}
                                   </span>
                                   {/* Name */}
@@ -166,7 +166,7 @@ export const ChatSidebarLeft = component$<ChatSidebarLeftProps>(
                       >
                         <span class="shrink-0 w-5 h-5 rounded-full overflow-hidden bg-(--color-surface) border border-(--color-rim) flex items-center justify-center">
                           {av
-                            ? <img src={av} alt={name} class="w-full h-full object-cover" />
+                            ? <img src={av} alt={name} width="20" height="20" class="w-full h-full object-cover" />
                             : <LuUser class="h-3 w-3 text-muted" />}
                         </span>
                         <span class="truncate">@ {name}</span>

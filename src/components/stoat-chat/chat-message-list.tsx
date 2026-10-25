@@ -147,7 +147,7 @@ export const ChatMessageList = component$<ChatMessageListProps>(
                           onSetEmojiPickerFor('');
                           await reactToMessage(activeId, msg._id, _e._id, token);
                         }}>
-                          <img src={`${STOAT_AUTUMN}/emojis/${_e._id}`} alt={_e.name} class="h-8 w-8" />
+                          <img src={`${STOAT_AUTUMN}/emojis/${_e._id}`} alt={_e.name} width="32" height="32" class="h-8 w-8" />
                         </button>
                       ))}
                     </div>
@@ -213,6 +213,7 @@ export const ChatMessageList = component$<ChatMessageListProps>(
                 <div class="mt-1 flex flex-wrap gap-2">
                   {msg.attachments!.map(att => (
                     att.metadata?.type === 'Image' ? (
+                      // eslint-disable-next-line qwik/jsx-img -- dimensions unknown until loaded
                       <img
                         key={att._id}
                         src={`${STOAT_AUTUMN}/attachments/${att._id}`}
@@ -255,7 +256,7 @@ export const ChatMessageList = component$<ChatMessageListProps>(
                         }}
                       >
                         {isCustomEmoji
-                          ? <img src={`${STOAT_AUTUMN}/emojis/${emojiId}`} alt={emojiId} class="h-5.5 w-5.5" />
+                          ? <img src={`${STOAT_AUTUMN}/emojis/${emojiId}`} alt={emojiId} width="22" height="22" class="h-5.5 w-5.5" />
                           : <span class="leading-none text-xl">{emojiId}</span>
                         }
                         <span>{userIds.length}</span>

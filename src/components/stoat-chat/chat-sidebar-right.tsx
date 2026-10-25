@@ -90,7 +90,7 @@ export const ChatSidebarRight = component$<ChatSidebarRightProps>(
                   <div class="hidden group-hover:flex absolute right-full mr-2 top-1/2 -translate-y-1/2 z-50 flex-col items-center gap-2 bg-(--color-canvas) border border-(--color-rim) rounded-lg p-3 shadow-xl w-40 pointer-events-none">
                     <div class="shrink-0 w-12 h-12 rounded-full overflow-hidden border border-(--color-rim) bg-(--color-surface) flex items-center justify-center">
                       {memberAv
-                        ? <img src={memberAv} alt={name} class="w-full h-full object-cover" />
+                        ? <img src={memberAv} alt={name} width="48" height="48" class="w-full h-full object-cover" />
                         : <LuUser class="h-6 w-6 text-muted" />}
                     </div>
                     <p class="text-xs font-semibold text-ink text-center truncate w-full">{name}</p>

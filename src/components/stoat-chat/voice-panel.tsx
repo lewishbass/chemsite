@@ -336,6 +336,7 @@ export const VoicePanel = component$<VoicePanelProps>(
     });
 
     // ── Derive participant tiles ────────────────────────────────────────
+    // eslint-disable-next-line qwik/no-use-visible-task
     useVisibleTask$(({ track }) => {
       track(() => chatState.voiceParticipants);
       track(() => chatState.userNames);

@@ -231,6 +231,7 @@ export default component$(() => {
   ];
 
 
+  // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(({ cleanup }) => {
     let rafId: number | null = null;
     const onMove = (e: MouseEvent) => {
@@ -323,7 +324,7 @@ export default component$(() => {
                   <div class="shrink-0 relative group/av">
                     <div class={`rounded-full overflow-hidden w-[80px] h-[80px] flex items-center justify-center border-2 ${stoatUser.value?.banner_url ? 'border-white/30' : 'border-edge bg-(--color-surface)'}`}>
                       {stoatUser.value?.avatar_url
-                        ? <img src={stoatUser.value.avatar_url} alt="Your avatar" class="w-full h-full object-cover" />
+                        ? <img src={stoatUser.value.avatar_url} alt="Your avatar" width="80" height="80" class="w-full h-full object-cover" />
                         : <LuUser class="h-10 w-10 text-ink" />}
                     </div>
                     {editingProfile.value && (
@@ -713,7 +714,7 @@ export default component$(() => {
                               <div class="relative z-10 flex items-center gap-4 p-3">
                                 <div class="shrink-0 rounded-md border border-[var(--color-rim)] bg-[var(--color-surface)] overflow-hidden w-[44px] h-[44px] flex items-center justify-center text-ink">
                                   {sv.icon
-                                    ? <img src={`https://chat.chemistryml.com/autumn/${sv.icon.tag}/${sv.icon._id}`} alt={sv.name} class="w-full h-full object-cover" />
+                                    ? <img src={`https://chat.chemistryml.com/autumn/${sv.icon.tag}/${sv.icon._id}`} alt={sv.name} width="44" height="44" class="w-full h-full object-cover" />
                                     : <LuServer class="h-8 w-8" />}
                                 </div>
                                 <div>
@@ -848,7 +849,7 @@ export default component$(() => {
                                 <div class="relative z-10 flex items-center gap-3 p-3">
                                   <div class={`shrink-0 rounded-full overflow-hidden w-[44px] h-[44px] flex items-center justify-center ${friendBanners.value[rel._id] ? 'border border-white/30' : 'border border-[var(--color-rim)] bg-[var(--color-surface)]'}`}>
                                     {chatState.userAvatars[rel._id]
-                                      ? <img src={chatState.userAvatars[rel._id]} alt="" class="w-full h-full object-cover" />
+                                      ? <img src={chatState.userAvatars[rel._id]} alt="" width="44" height="44" class="w-full h-full object-cover" />
                                       : <LuUser class={`h-7 w-7 ${friendBanners.value[rel._id] ? 'text-white' : 'text-ink'}`} />}
                                   </div>
                                   <div>

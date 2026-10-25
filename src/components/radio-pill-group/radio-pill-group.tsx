@@ -27,6 +27,7 @@ export const RadioPillGroup = component$(({ labels, active }: RadioPillGroupProp
     const isOpen = useSignal(false);
     const dropdownRef = useSignal<HTMLDivElement>();
 
+    // eslint-disable-next-line qwik/no-use-visible-task
     useVisibleTask$(({ track, cleanup }) => {
         track(() => active.value);
         const container = pillsRef.value;
@@ -45,6 +46,7 @@ export const RadioPillGroup = component$(({ labels, active }: RadioPillGroupProp
         cleanup(() => ro.disconnect());
     });
 
+    // eslint-disable-next-line qwik/no-use-visible-task
     useVisibleTask$(({ cleanup }) => {
         const handler = (e: MouseEvent) => {
             if (dropdownRef.value && !dropdownRef.value.contains(e.target as Node)) {

@@ -14,6 +14,7 @@ export default component$(() => {
             href="/"
             class="text-ink font-bold text-xl tracking-wide hover:opacity-80 transition-opacity flex-grow-1"
           >
+            {/* eslint-disable-next-line qwik/jsx-img -- static asset, ESM import not worth the churn */}
             <img src="/icon.svg" alt="Description" width="30" height="30" class="inline-block mr-2" />
             Labby
           </a>

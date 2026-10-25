@@ -38,6 +38,7 @@ export const CommandCenter = component$(() => {
     const hasLoaded  = useSignal(false);
 
     // Load queue from localStorage on mount
+    // eslint-disable-next-line qwik/no-use-visible-task
     useVisibleTask$(() => {
         try {
             const raw = localStorage.getItem(STORAGE_KEY);
@@ -59,6 +60,7 @@ export const CommandCenter = component$(() => {
     });
 
     // Save queue to localStorage whenever it changes (after initial load)
+    // eslint-disable-next-line qwik/no-use-visible-task
     useVisibleTask$(({ track }) => {
         const q      = track(() => queue.value);
         const loaded = track(() => hasLoaded.value);
@@ -80,6 +82,7 @@ export const CommandCenter = component$(() => {
     });
 
     // Client-side timer drives queue progress
+    // eslint-disable-next-line qwik/no-use-visible-task
     useVisibleTask$(({ cleanup }) => {
         const interval = setInterval(() => {
             const q = queue.value;

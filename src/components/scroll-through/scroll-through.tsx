@@ -12,6 +12,7 @@ export const ScrollThrough = component$(({ word_list = [''] }: ScrollThroughProp
   const prevIdx = useSignal(-1);
   const transKey = useSignal(0);
 
+  // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(({ cleanup }) => {
     const id = setInterval(() => {
       prevIdx.value = currIdx.value;

@@ -27,6 +27,7 @@ export const EmojiPicker = component$<EmojiPickerProps>(
     // on activate, focus the search input
     const searchRef = useSignal<HTMLInputElement>();
 
+        // eslint-disable-next-line qwik/no-use-visible-task
     useVisibleTask$(() => {
       searchRef.value?.focus();
     });
@@ -80,7 +81,7 @@ export const EmojiPicker = component$<EmojiPickerProps>(
                                     <button key={e._id} title={e.name}
                                         class="p-0.5 rounded hover:bg-edge cursor-pointer"
                                         onClick$={() => onPick$(e._id)}>
-                                        <img src={`${STOAT_AUTUMN}/emojis/${e._id}`} alt={e.name} class="h-6 w-6" />
+                                        <img src={`${STOAT_AUTUMN}/emojis/${e._id}`} alt={e.name} width="24" height="24" class="h-6 w-6" />
                                     </button>
                                 ))}
                             </div>

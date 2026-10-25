@@ -33,6 +33,7 @@ export default component$(() => {
   const activeMlCategory = useSignal('Classification');
   const svgRef = useSignal<SVGSVGElement>();
 
+  // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(({ cleanup }) => {
     let rafId: number | null = null;
     const onMove = (e: MouseEvent) => {
