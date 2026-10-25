@@ -24,9 +24,9 @@
     "qwik": "qwik"
   },
   "devDependencies": {
-    "@auth/qwik": "0.8.0",
+    "@auth/qwik": "^0.9.3",
     "@builder.io/qwik": "^1.19.2",
-    "@builder.io/qwik-city": "^1.19.2",
+    "@builder.io/qwik-city": "^1.20.3",
     "@eslint/js": "^9",
     "@netlify/edge-functions": "^2.0.0",
     "@qwikest/icons": "^0.0.13",
@@ -34,7 +34,7 @@
     "eslint": "9.32.0",
     "eslint-plugin-qwik": "^1.19.2",
     "globals": "16.4.0",
-    "netlify-cli": "^26.0.2",
+    "netlify-cli": "^27.14.2",
     "prettier": "3.6.2",
     "typescript": "5.4.5",
     "typescript-eslint": "8.38.0",
@@ -44,16 +44,28 @@
     "vite-tsconfig-paths": "^4.2.1"
   },
   "dependencies": {
-    "@auth/core": "^0.40.0",
+    "@auth/core": "^0.41.3",
+    "@diqi/emoji-search": "^0.7.0",
     "@tailwindcss/vite": "^4.3.0",
     "@types/dompurify": "^3.0.5",
     "dompurify": "^3.4.8",
     "highlight.js": "^11.11.1",
-    "katex": "^0.17.0",
+    "katex": "^0.18.10",
     "livekit-client": "^2.19.1",
     "marked": "^18.0.4",
     "marked-highlight": "^2.2.4",
     "marked-katex-extension": "^5.1.10",
     "tailwindcss": "^4.3.0"
+  },
+  "overrides": {
+    "sharp@<0.35.5": "0.35.5",
+    "vite-imagetools@<=3.1.0 || 7.0.4 - 10.0.0": "10.0.1",
+    "esbuild@0.27.3 - 0.28.0": "0.28.1",
+    "toml@<=5.0.0": "5.0.1",
+    "zod@<4.6.6": "4.6.6"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "sharp@0.35.5": true
   }
 }

@@ -1,7 +1,7 @@
 import { component$, useSignal, useStore, useVisibleTask$, $ } from '@builder.io/qwik';
 import {
   STOAT_WS, avatarUrl, ackChannel, ulidToDate,
-  type StoatMsg, type StoatChannel, type StoatServer, type StoatMember, type StoatEmoji,
+  type StoatMsg, type StoatChannel, type StoatServer, type StoatMember, type StoatEmoji, type DelEmojiPayload,
   type WsReady, type WsMessage, type WsMessageUpdate, type WsMessageDelete,
   type VoiceState,
   type WsMessageReact, type WsMessageUnreact,
@@ -341,6 +341,21 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
             _id: ch._id, name: ch.name, channel_type: ch.channel_type,
             server: ch.server, recipients: ch.recipients,
           }];
+        }
+      } else if (evt.type === 'EmojiCreate') {
+        const e = evt as unknown as StoatEmoji;
+        if (e._id) {
+          // The EmojiCreate payload doesn't include `animated`; default to false.
+          chatState.serverEmojis = {
+            ...chatState.serverEmojis,
+            [e._id]: { ...e, animated: e.animated ?? false },
+          };
+        }
+      } else if (evt.type === 'EmojiDelete') {
+        const e = evt as unknown as DelEmojiPayload;
+        if (e.id) {
+          const { [e.id]: _, ...rest } = chatState.serverEmojis;
+          chatState.serverEmojis = rest;
         }
       }
     };

@@ -1,9 +1,10 @@
 import { component$, useSignal, useVisibleTask$, $, type QRL } from '@builder.io/qwik';
-import { LuPaperclip, LuReply, LuUpload, LuX } from '@qwikest/icons/lucide';
+import { LuPaperclip, LuSmile, LuReply, LuUpload, LuX } from '@qwikest/icons/lucide';
 import {
   type StoatMsg, type StoatChatState,
   uploadAttachment,
 } from './stoat_scripts';
+import { EmojiPicker } from './emoji-picker';
 
 interface ChatInputProps {
   chatState: StoatChatState;
@@ -29,6 +30,7 @@ export const ChatInput = component$<ChatInputProps>(
     const textareaRef = useSignal<Element>();
     const isDragOver = useSignal(false);
     const inputWrapRef = useSignal<Element>();
+    const showEmojiPicker = useSignal(false);
 
     const input_style = "w-full rounded-lg px-6 py-2.5 active:outline-none focus:ring-none focus:outline-none focus:bg-(--color-canvas)/50 transition-colors duration-300 text-(--color-ink) resize-none mini-scroll";
 
@@ -86,20 +88,20 @@ export const ChatInput = component$<ChatInputProps>(
       >
         {/* Drag-and-drop overlay */}
         {isDragOver.value && (
-          <div class="absolute inset-0 z-50 bg-(--color-accent)/10 border-2 border-dashed border-(--color-accent) flex flex-row gap-2 items-center justify-center pointer-events-none">
-            <LuUpload class="h-5 w-5 mt-2 text-(--color-accent) mb-2" />
-            <p class="text-(--color-accent) font-semibold">Drop files to attach</p>
+          <div class="absolute inset-0 z-50 bg-accent/10 border-2 border-dashed border-accent flex flex-row gap-2 items-center justify-center pointer-events-none">
+            <LuUpload class="h-5 w-5 mt-2 text-accent mb-2" />
+            <p class="text-accent font-semibold">Drop files to attach</p>
           </div>
         )}
 
         {pendingAttachmentPreviews.value.length > 0 && (
-          <div class="shrink-0 p-2 flex flex-wrap gap-2 border-t border-(--color-rim)/50">
+          <div class="shrink-0 p-2 flex flex-wrap gap-2 border-t border-rim/50">
             {pendingAttachmentPreviews.value.map((att, i) => (
               <div key={att.id} class="relative">
                 {att.isImage ? (
-                  <img src={att.url} alt={att.name} class="h-16 w-16 rounded-md object-cover border border-(--color-rim)" />
+                  <img src={att.url} alt={att.name} width={64} height={64} class="h-16 w-16 rounded-md object-cover border border-rim" />
                 ) : (
-                  <div class="h-12 px-3 flex items-center gap-2 rounded-md bg-(--color-edge) border border-(--color-rim) text-xs text-ink max-w-[120px]">
+                    <div class="h-12 px-3 flex items-center gap-2 rounded-md bg-edge border border-rim text-xs text-ink max-w-30">
                     📎 <span class="truncate">{att.name}</span>
                   </div>
                 )}
@@ -116,7 +118,7 @@ export const ChatInput = component$<ChatInputProps>(
         )}
 
         {replyTo && (
-          <div class="shrink-0 px-4 py-1.5 border-t border-(--color-rim)/50 flex items-center gap-2 text-xs">
+          <div class="shrink-0 px-4 py-1.5 border-t border-rim/50 flex items-center gap-2 text-xs">
             <LuReply class="h-3.5 w-3.5 shrink-0 text-muted" />
             <span class="text-muted">Replying to</span>
             <span class="font-semibold text-ink">{chatState.userNames[replyTo.author] ?? replyTo.author}</span>
@@ -128,8 +130,8 @@ export const ChatInput = component$<ChatInputProps>(
           </div>
         )}
 
-        <div class="shrink-0 flex border-t border-(--color-rim) border-dashed">
-          <label class={`shrink-0 px-3 flex items-center cursor-pointer transition-colors ${fileUploading.value ? 'opacity-40 pointer-events-none text-muted' : 'text-muted hover:text-ink'}`} title="Attach file">
+        <div class="shrink-0 flex border-t border-rim border-dashed">
+          <label class={`shrink-0 pl-2 pr-1 flex items-center cursor-pointer transition-colors ${fileUploading.value ? 'opacity-40 pointer-events-none text-muted' : 'text-muted hover:text-ink'}`} title="Attach file">
             <LuPaperclip class="h-4 w-4" />
             <input type="file" class="sr-only" multiple onChange$={async (_, el) => {
               const files = Array.from(el.files ?? []);
@@ -143,11 +145,38 @@ export const ChatInput = component$<ChatInputProps>(
               }
             }} />
           </label>
+          <button
+            class={`shrink-0 pr-1 pl-2 flex items-center cursor-pointer transition-colors ${showEmojiPicker.value ? 'text-accent' : 'text-muted hover:text-ink'}`}
+            title="Pick Emoji"
+            onClick$={() => { showEmojiPicker.value = !showEmojiPicker.value; }}
+          >
+            <LuSmile class="h-4 w-4" />
+          </button>
+
+          {showEmojiPicker.value && (
+            <EmojiPicker
+              chatState={chatState}
+              onClose$={() => { showEmojiPicker.value = false; }}
+              onPick$={(emoji) => {
+                showEmojiPicker.value = false;
+                const pos = textareaRef.value ? (textareaRef.value as HTMLTextAreaElement).selectionStart : inputText.value.length;
+                inputText.value = inputText.value.slice(0, pos) + emoji + inputText.value.slice(pos);
+                if (textareaRef.value) {
+                  const ta = textareaRef.value as HTMLTextAreaElement;
+                  ta.focus();
+                  setTimeout(() => {
+                    ta.selectionStart = ta.selectionEnd = pos + emoji.length;
+                  }, 10);
+                }
+              }}
+            />
+          )}
+
           <textarea
             ref={textareaRef}
             rows={1}
             placeholder={`Message #${activeName || 'general'}…`}
-            class={input_style + " -mr-[2px]"}
+            class={input_style + " -mr-0.5"}
             value={inputText.value}
             onInput$={(_, el) => {
               inputText.value = el.value;
@@ -184,9 +213,9 @@ export const ChatInput = component$<ChatInputProps>(
               }
             }}
           />
-          <div class="bg-(--color-rim) w-[1px] h-[65%] self-center relative z-20" />
+          <div class="bg-rim w-px h-[65%] self-center relative z-20" />
           <button
-            class="shrink-0 text-sm px-8 py-4 disabled:opacity-40 disabled:pointer-events-none cursor-pointer hover:bg-(--color-canvas) transition-colors -ml-[2px]"
+            class="shrink-0 text-sm px-8 py-4 disabled:opacity-40 disabled:pointer-events-none cursor-pointer hover:bg-canvas transition-colors -ml-0.5"
             disabled={sending}
             onClick$={async () => {
               const content = inputText.value.trim();

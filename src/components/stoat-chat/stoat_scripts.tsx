@@ -131,6 +131,10 @@ export type StoatEmoji = {
   parent: { type: 'Server' | 'Detached'; id?: string };
 };
 
+export type DelEmojiPayload = {
+  id: string;
+};
+
 /** A pre-parsed segment of message content (plain text or custom emoji). */
 export type ContentPart =
   | { type: 'text'; text: string; key: number }

@@ -8,7 +8,7 @@ import {
 } from './stoat_scripts';
 import { MarkdownMessage, isEmojiOnly } from './markdown-message';
 
-const QUICK_EMOJI = ['👍', '👎', '❤️', '💯', '😂', '😮', '😢', '😬', '😍', '🔥', '👀', '🗿', '🙏🏻', '🦐'];
+const QUICK_EMOJI = ['👍', '👎', '❤️', '💯', '😂', '😮', '😢', '😬', '😍', '🔥', '👀', '🗿', '🙏🏻', '🦐', '🍆'];
 
 interface ChatMessageListProps {
   chatState: StoatChatState;
@@ -92,7 +92,7 @@ export const ChatMessageList = component$<ChatMessageListProps>(
             ? formatSystemMessage(msg.system, chatState.userNames, msg.createdAt)
             : null;
           return (
-            <div key={msg._id} class={`group/msg relative hover:bg-(--color-edge)/10 rounded-md px-1 -mx-1 pt-0.5 ${isGrouped ? '-mt-3' : ''}`}>
+            <div key={msg._id} class={`group/msg relative hover:bg-edge/10 rounded-md px-1 -mx-1 pt-0.5 ${isGrouped ? '-mt-3' : ''}`}>
 
               {/* System message (call started, user joined, …) */}
               {sysText && (
@@ -105,23 +105,23 @@ export const ChatMessageList = component$<ChatMessageListProps>(
 
               {/* Hover action toolbar */}
               {(
-              <div class="absolute right-1 -top-3 hidden group-hover/msg:flex items-center gap-0.5 bg-(--color-surface) border border-(--color-rim) rounded-lg px-1.5 py-1 shadow-md z-20">
-                <button class="p-1 rounded hover:bg-(--color-edge) text-muted hover:text-ink transition-colors cursor-pointer" title="React with emoji"
+                <div class="absolute right-1 -top-3 hidden group-hover/msg:flex items-center gap-0.5 bg-surface border border-rim rounded-lg px-1.5 py-1 shadow-md z-20">
+                  <button class="p-1 rounded hover:bg-edge text-muted hover:text-ink transition-colors cursor-pointer" title="React with emoji"
                   onClick$={() => { onSetEmojiPickerFor(emojiPickerFor === msg._id ? '' : msg._id); }}>
                   <LuSmile class="h-3.5 w-3.5" />
                 </button>
-                <button class="p-1 rounded hover:bg-(--color-edge) text-muted hover:text-ink transition-colors cursor-pointer" title="Reply"
+                  <button class="p-1 rounded hover:bg-edge text-muted hover:text-ink transition-colors cursor-pointer" title="Reply"
                   onClick$={() => { onSetReplyTo(msg); onSetEmojiPickerFor(''); }}>
                   <LuReply class="h-3.5 w-3.5" />
                   </button>
                   {msg.author === chatState.currentUserId && 
-                    <button class="p-1 rounded hover:bg-(--color-edge) text-muted hover:text-ink transition-colors cursor-pointer" title="Edit"
+                    <button class="p-1 rounded hover:bg-edge text-muted hover:text-ink transition-colors cursor-pointer" title="Edit"
                       onClick$={() => { onSetEditingMsgId(msg._id); onSetEditingContent(msg.content ?? ''); onSetEmojiPickerFor(''); }}>
                       <LuPencil class="h-3.5 w-3.5" />
                     </button>
                   }
-                  {msg.author === chatState.currentUserId || msg.system && (
-                    <button class="p-1 rounded hover:bg-(--color-edge) text-red-400/70 hover:text-red-400 transition-colors cursor-pointer" title="Delete"
+                  {(msg.author === chatState.currentUserId || msg.system) && (
+                    <button class="p-1 rounded hover:bg-edge text-red-400/70 hover:text-red-400 transition-colors cursor-pointer" title="Delete"
                       onClick$={async () => { await deleteMessage(activeId, msg._id, token); }}>
                       <LuTrash2 class="h-3.5 w-3.5" />
                     </button>
@@ -131,23 +131,23 @@ export const ChatMessageList = component$<ChatMessageListProps>(
 
               {/* Emoji picker popover */}
               {emojiPickerFor === msg._id && (
-                <div class="absolute right-1 top-5 z-30 bg-(--color-surface) border border-(--color-rim) rounded-xl p-2 shadow-xl max-w-[220px]">
-                  <div class="flex flex-wrap gap-1 pb-1">
-                    {QUICK_EMOJI.map(e => (
-                      <button key={e} class="p-1 rounded hover:bg-(--color-edge) text-xl leading-none cursor-pointer" onClick$={async () => {
+                <div class="absolute right-1 top-5 z-30 bg-surface border border-rim rounded-xl p-2 shadow-xl max-w-55">
+                  <div class="grid grid-cols-5 gap-1">
+                    {QUICK_EMOJI.map(_e => (
+                      <button key={_e} class="p-1 rounded hover:bg-edge text-2xl leading-none cursor-pointer" onClick$={async () => {
                         onSetEmojiPickerFor('');
-                        await reactToMessage(activeId, msg._id, e, token);
-                      }}>{e}</button>
+                        await reactToMessage(activeId, msg._id, _e, token);
+                      }}>{_e}</button>
                     ))}
                   </div>
                   {Object.keys(chatState.serverEmojis).length > 0 && (
-                    <div class="flex flex-wrap gap-1 border-t border-(--color-rim) pt-1">
-                      {Object.values(chatState.serverEmojis).slice(0, 24).map(e => (
-                        <button key={e._id} class="p-0.5 rounded hover:bg-(--color-edge) cursor-pointer" title={e.name} onClick$={async () => {
+                    <div class="grid grid-cols-5 gap-1 border-t mt-2 border-rim pt-2">
+                      {Object.values(chatState.serverEmojis).slice(0, 24).map(_e => (
+                        <button key={_e._id} class="p-0.5 rounded hover:bg-edge relative cursor-pointer" title={_e.name} onClick$={async () => {
                           onSetEmojiPickerFor('');
-                          await reactToMessage(activeId, msg._id, e._id, token);
+                          await reactToMessage(activeId, msg._id, _e._id, token);
                         }}>
-                          <img src={`${STOAT_AUTUMN}/emojis/${e._id}`} alt={e.name} class="h-6 w-6" />
+                          <img src={`${STOAT_AUTUMN}/emojis/${_e._id}`} alt={_e.name} class="h-8 w-8" />
                         </button>
                       ))}
                     </div>
@@ -156,7 +156,7 @@ export const ChatMessageList = component$<ChatMessageListProps>(
               )}
               {/* Author */}
               {!isGrouped && !sysText && (
-                <div class="text-xs font-semibold text-(--color-accent-muted) mb-0.5 flex items-end gap-2">
+                <div class="text-xs font-semibold text-accent-muted mb-0.5 flex items-end gap-2">
                   <span>{chatState.userNames[msg.author] ?? msg.author}</span>
                   <span class="text-[10px] font-normal text-muted/60">{formatTime(msg.createdAt)}</span>
                   {msg.edited && <span class="text-[10px] font-normal text-muted/40 italic">(edited)</span>}
@@ -183,7 +183,7 @@ export const ChatMessageList = component$<ChatMessageListProps>(
               {sysText ? null : editingMsgId === msg._id ? (
                 <div class="flex items-center gap-2 mb-1">
                   <input
-                    class="flex-1 rounded px-2 py-1 text-sm bg-(--color-edge) text-ink border border-(--color-rim) focus:outline-none"
+                    class="flex-1 rounded px-2 py-1 text-sm bg-edge text-ink border border-rim focus:outline-none"
                     value={editingContent}
                     onInput$={(_, el) => onSetEditingContent(el.value)}
                     onKeyDown$={async (e) => {
@@ -217,7 +217,7 @@ export const ChatMessageList = component$<ChatMessageListProps>(
                         key={att._id}
                         src={`${STOAT_AUTUMN}/attachments/${att._id}`}
                         alt={att.filename ?? 'Image'}
-                        class="max-w-[300px] max-h-[220px] rounded-lg object-contain border border-(--color-rim) cursor-pointer"
+                        class="max-w-75 max-h-55 rounded-lg object-contain border border-rim cursor-pointer"
                         loading="lazy"
                       />
                     ) : (
@@ -226,7 +226,7 @@ export const ChatMessageList = component$<ChatMessageListProps>(
                         href={`${STOAT_AUTUMN}/attachments/${att._id}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="flex items-center gap-2 px-3 py-2 rounded-lg bg-(--color-edge) border border-(--color-rim) text-xs text-ink hover:bg-(--color-canvas) transition-colors"
+                          class="flex items-center gap-2 px-3 py-2 rounded-lg bg-edge border border-rim text-xs text-ink hover:bg-canvas transition-colors"
                       >
                         📎 {att.filename ?? 'File'}{att.size ? ` (${Math.round(att.size / 1024)}KB)` : ''}
                       </a>
@@ -246,8 +246,8 @@ export const ChatMessageList = component$<ChatMessageListProps>(
                         key={emojiId}
                         class={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border transition-colors cursor-pointer ${
                           mine
-                            ? 'bg-(--color-accent-muted)/15 border-(--color-accent-muted)/40 text-ink'
-                            : 'bg-(--color-edge)/60 border-(--color-rim) text-muted hover:text-ink hover:bg-(--color-edge)'
+                          ? 'bg-accent-muted/15 border-accent-muted/40 text-ink'
+                          : 'bg-edge/60 border-rim text-muted hover:text-ink hover:bg-edge'
                         }`}
                         onClick$={async () => {
                           if (mine) await unreactFromMessage(activeId, msg._id, emojiId, token);
@@ -255,8 +255,8 @@ export const ChatMessageList = component$<ChatMessageListProps>(
                         }}
                       >
                         {isCustomEmoji
-                          ? <img src={`${STOAT_AUTUMN}/emojis/${emojiId}`} alt={emojiId} class="h-3.5 w-3.5" />
-                          : <span class="leading-none">{emojiId}</span>
+                          ? <img src={`${STOAT_AUTUMN}/emojis/${emojiId}`} alt={emojiId} class="h-5.5 w-5.5" />
+                          : <span class="leading-none text-xl">{emojiId}</span>
                         }
                         <span>{userIds.length}</span>
                       </button>
