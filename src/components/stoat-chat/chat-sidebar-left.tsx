@@ -1,8 +1,8 @@
 import { component$, type QRL } from '@builder.io/qwik';
-import { LuChevronLeft, LuClock, LuHash, LuHeadphones, LuMicOff, LuUser, LuVolumeX } from '@qwikest/icons/lucide';
+import { LuCamera, LuChevronLeft, LuClock, LuHash, LuHeadphones, LuMicOff, LuUser, LuVolumeX } from '@qwikest/icons/lucide';
 import {
   type StoatChannel, type StoatServer, type StoatChatState,
-  acceptFriendRequest,
+  acceptFriendRequest, revokeFriendRequest,
 } from './stoat_scripts';
 
 export type ChannelActivator = QRL<(channelId: string) => Promise<void>>;
@@ -60,7 +60,12 @@ export const ChatSidebarLeft = component$<ChatSidebarLeftProps>(
                   .map((ch) => {
                     const isVoice = Object.keys(ch).includes('voice');
                     const isActiveVoice = isVoice && chatState.activeVoiceChannelId === ch._id;
-                    const participants = isActiveVoice ? Object.entries(chatState.voiceParticipants) : [];
+                    // Show participants for every voice channel, not just the one the user is in
+                    const participants = isVoice
+                      ? Object.entries(chatState.voiceChannelByUser).filter(([, chId]) => chId === ch._id)
+                        .map(([uid]) => [uid, chatState.voiceParticipants[uid]] as const)
+                        .filter(([uid]) => chatState.voiceParticipants[uid])
+                      : [];
                     return (
                       <div key={ch._id}>
                         <button
@@ -84,14 +89,14 @@ export const ChatSidebarLeft = component$<ChatSidebarLeftProps>(
                           {unreadChannels[ch._id] && (
                             <span class="shrink-0 w-1.5 h-1.5 rounded-full bg-green-400" />
                           )}
-                          {isActiveVoice && participants.length > 0 && (
-                            <span class="shrink-0 text-[10px] text-green-400 font-medium">
+                          {participants.length > 0 && (
+                            <span class={`shrink-0 text-[10px] ${isActiveVoice ? 'text-green-400' : 'text-yellow-500/90'} font-medium`}>
                               {participants.length}
                             </span>
                           )}
                         </button>
                         {/* Voice participants list */}
-                        {isActiveVoice && participants.length > 0 && (
+                        {participants.length > 0 && (
                           <div class="pl-5 pb-1 space-y-0.5">
                             {participants.map(([uid, state]) => {
                               const name = chatState.userNames[uid] ?? uid.slice(0, 8);
@@ -113,6 +118,9 @@ export const ChatSidebarLeft = component$<ChatSidebarLeftProps>(
                                     {name}{isLocal ? ' (You)' : ''}
                                   </span>
                                   {/* State badges */}
+                                  {state.video && (
+                                    <LuCamera class="shrink-0 h-3 w-3 text-green-400" />
+                                  )}
                                   {state.mute && (
                                     <LuMicOff class="shrink-0 h-3 w-3 text-red-400/70" />
                                   )}
@@ -179,7 +187,18 @@ export const ChatSidebarLeft = component$<ChatSidebarLeftProps>(
                   <div key={rel._id} class="flex items-center gap-2 px-3 py-1.5">
                     <span class="shrink-0 w-2 h-2 rounded-full bg-gray-500" />
                     <span class="flex-1 text-xs text-muted truncate italic">{chatState.userNames[rel._id] ?? rel._id}</span>
-                    <span title="Request sent"><LuClock class="shrink-0 h-3 w-3 text-muted opacity-60" /></span>
+                    <button
+                      class="shrink-0 text-muted hover:text-red-400 transition-colors cursor-pointer"
+                      title="Revoke friend request"
+                      onClick$={async () => {
+                        const ok = await revokeFriendRequest(rel._id, token);
+                        if (ok) {
+                          chatState.relations = chatState.relations.filter(r => r._id !== rel._id);
+                        }
+                      }}
+                    >
+                      <LuClock class="shrink-0 h-3 w-3 text-muted opacity-60" />
+                    </button>
                   </div>
                 ))}
               </div>

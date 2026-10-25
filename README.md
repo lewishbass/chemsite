@@ -13,7 +13,7 @@ npm run build # or `yarn build`
 
 ## TODO
 
-    - voice channels
+ - voice channels
 
  - interactive clustering graph
 

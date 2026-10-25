@@ -973,7 +973,7 @@ export const VoicePanel = component$<VoicePanelProps>(
     const tiles = participantTiles.value;
 
     return (
-      <div class="flex flex-col h-content bg-(--color-canvas)/30">
+      <div class="flex flex-col h-content min-h-70 bg-(--color-canvas)/30">
         {/* ── Empty state (not connected) ── */}
         {!connected.value ? (
           <div class="flex-1 flex items-center justify-center flex-col gap-3 p-6">

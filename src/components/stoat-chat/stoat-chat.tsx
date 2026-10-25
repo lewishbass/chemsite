@@ -3,10 +3,12 @@ import {
   STOAT_WS, avatarUrl, ackChannel, ulidToDate,
   type StoatMsg, type StoatChannel, type StoatServer, type StoatMember, type StoatEmoji,
   type WsReady, type WsMessage, type WsMessageUpdate, type WsMessageDelete,
+  type VoiceState,
   type WsMessageReact, type WsMessageUnreact,
   type WsUserRelationship, type WsChannelCreate, type WsChannelStartTyping, type WsChannelStopTyping,
   type WsChannelAck, type WsEvent, type StoatChatState,
   type WsVoiceChannelJoin, type WsVoiceChannelLeave, type WsVoiceChannelMove, type WsVoiceStateUpdate,
+  userVoiceStateToVoiceState,
   fetchServerMembers, openDMChannel, activateChannelData,
   fetchServerChannels, sendMessage,
 } from './stoat_scripts';
@@ -76,6 +78,8 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
   const outerRef = useSignal<Element>();
   const voiceConnected = useSignal(false);
 
+  console.log("StoatChat initialized");
+
   // ── Derive whether the active channel is a voice channel ─────────────
   function isVoiceChannel(id: string): boolean {
     const ch = channels.value.find(c => c._id === id);
@@ -91,7 +95,7 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
       activeId, activeName, messages, unreadChannels, newMsgCount,
     });
   });
-
+  // ── WebSocket connection and event handling ─────────────
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(({ cleanup }) => {
     if (!token) { status.value = 'error'; return; }
@@ -104,6 +108,7 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
     ws.onmessage = async (rawEvt: MessageEvent) => {
       let evt: WsEvent;
       try { evt = JSON.parse(rawEvt.data as string) as WsEvent; } catch { return; }
+      console.log("Received WS event:", JSON.stringify(evt));
 
       // Bonfire voice events use "event" instead of "type" — normalize
       if (!evt.type && (evt as any).event) {
@@ -137,6 +142,26 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
         servers.value = ready.servers ?? [];
         channels.value = ready.channels ?? [];
 
+        // Seed voice state from Ready so the sidebar shows who is in voice channels
+        // before the user joins one themselves.
+        // Payload shape: [{ id: <channel_id>, participants: [{ id: <user_id>, is_publishing, ... }] }]
+        const seedParticipants: Record<string, VoiceState> = {};
+        const seedChannels: Record<string, string> = {};
+        for (const vs of ready.voice_states ?? []) {
+          const chId = vs.id;
+          if (!chId) continue;
+          for (const p of vs.participants ?? []) {
+            const uid = p.id;
+            if (!uid) continue;
+            seedParticipants[uid] = userVoiceStateToVoiceState(p);
+            seedChannels[uid] = chId;
+          }
+        }
+        if (Object.keys(seedParticipants).length) {
+          chatState.voiceParticipants = { ...chatState.voiceParticipants, ...seedParticipants };
+          chatState.voiceChannelByUser = { ...chatState.voiceChannelByUser, ...seedChannels };
+        }
+
         const savedChannelId = typeof localStorage !== 'undefined' ? localStorage.getItem('stoat-activeChannelId') : null;
         const allChannels = ready.channels ?? [];
         const first = savedChannelId
@@ -151,6 +176,7 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
           messages.value = [...messages.value, {
             _id: msg._id, content: msg.content, author: msg.author,
             channel: msg.channel, attachments: msg.attachments, replies: msg.replies,
+            system: msg.system ?? null,
             createdAt: ulidToDate(msg._id), edited: msg.edited ?? null,
           }];
           newMsgCount.value++;
@@ -196,7 +222,14 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
         const upd = evt as WsMessageUpdate;
         if (upd.channel === activeId.value) {
           messages.value = messages.value.map(m =>
-            m._id === upd.id ? { ...m, content: upd.data?.content ?? m.content, edited: upd.data?.edited ?? m.edited } : m
+            m._id === upd.id
+              ? {
+                ...m,
+                content: 'content' in upd.data ? (upd.data.content ?? m.content) : m.content,
+                edited: upd.data?.edited ?? m.edited,
+                system: upd.data?.system ?? m.system,
+              }
+              : m
           );
         }
 
@@ -234,40 +267,72 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
           const av = avatarUrl(u.avatar);
           if (av) chatState.userAvatars = { ...chatState.userAvatars, [u._id]: av };
         }
-        const filtered = chatState.relations.filter(r => r._id !== rel.id);
-        chatState.relations = rel.status !== 'None' && rel.status !== 'User'
-          ? [...filtered, { _id: rel.id, status: rel.status }] : filtered;
-
+        // NOTE: `rel.id` is the relationship ID, NOT the user ID — the user's
+        // actual ID is in `user._id`. Always key relations off user._id.
+        const userId = u?._id ?? rel.id;
+        const newStatus = rel.status ?? rel.user?.relationship;
+        const filtered = chatState.relations.filter(r => r._id !== userId);
+        chatState.relations = newStatus && newStatus !== 'None' && newStatus !== 'User'
+          ? [...filtered, { _id: userId, status: newStatus }] : filtered;
+        console.log('UserRelationship event:', JSON.stringify(rel));
+        console.log('Updated relations:', JSON.stringify(chatState.relations));
+        console.log('New status:', JSON.stringify(newStatus));
       } else if (evt.type === 'VoiceChannelJoin') {
         const v = evt as WsVoiceChannelJoin;
-        const uid = v.data.state.user_id;
+        const uid = v.state.id;
         chatState.voiceParticipants = {
           ...chatState.voiceParticipants,
-          [uid]: v.data.state,
+          [uid]: userVoiceStateToVoiceState(v.state),
         };
+        chatState.voiceChannelByUser = { ...chatState.voiceChannelByUser, [uid]: v.id };
 
       } else if (evt.type === 'VoiceChannelLeave') {
         const v = evt as WsVoiceChannelLeave;
-        const uid2 = v.data.user_id;
+        const uid2 = v.user;
         const { [uid2]: _voiceLeave, ...rest } = chatState.voiceParticipants;
         chatState.voiceParticipants = rest;
+        const { [uid2]: _chLeave, ...restCh } = chatState.voiceChannelByUser;
+        chatState.voiceChannelByUser = restCh;
 
       } else if (evt.type === 'VoiceChannelMove') {
         const v = evt as WsVoiceChannelMove;
-        const uid3 = v.data.user_id;
+        const uid3 = v.user;
         const { [uid3]: _voiceMove, ...rest2 } = chatState.voiceParticipants;
         chatState.voiceParticipants = {
           ...rest2,
-          [uid3]: v.data.state,
+          [uid3]: userVoiceStateToVoiceState(v.state),
         };
+        chatState.voiceChannelByUser = { ...chatState.voiceChannelByUser, [uid3]: v.to };
 
-      } else if (evt.type === 'VoiceStateUpdate') {
+      } else if (evt.type === 'UserVoiceStateUpdate' || evt.type === 'VoiceStateUpdate') {
         const v = evt as WsVoiceStateUpdate;
-        const uid4 = v.data.user_id;
-        chatState.voiceParticipants = {
-          ...chatState.voiceParticipants,
-          [uid4]: v.data.state,
-        };
+        // Actual payload: { id: <user_id>, channel_id: <channel_id>, data: { is_publishing, ... } }
+        // (older docs said id = channel id; handle both by preferring data.id for the user)
+        const uid4 = (v.data as any).id ?? (v.data as any).user_id ?? v.id;
+        const chId = v.channel_id ?? (v.data as any).channel_id ?? v.id;
+        if (uid4) {
+          const existing = chatState.voiceParticipants[uid4];
+          // The delta only contains the fields that changed (e.g. { is_publishing: true }
+          // or { camera: true }) — map only those fields so unspecified ones (camera,
+          // screensharing, etc.) keep their previous values instead of being reset.
+          const delta = userVoiceStateToVoiceState({ id: uid4, ...v.data });
+          const patch: Partial<VoiceState> = {};
+          if ('is_publishing' in v.data) {
+            patch.mute = delta.mute;
+            patch.self_mute = delta.self_mute;
+          }
+          if ('camera' in v.data) patch.video = delta.video;
+          if ('screensharing' in v.data) patch.screensharing = delta.screensharing;
+          chatState.voiceParticipants = {
+            ...chatState.voiceParticipants,
+            [uid4]: existing
+              ? { ...existing, ...patch }
+              : { user_id: uid4, mute: false, deaf: false, video: false, self_mute: false, self_deaf: false, ...patch },
+          };
+          if (chId) {
+            chatState.voiceChannelByUser = { ...chatState.voiceChannelByUser, [uid4]: chId };
+          }
+        }
 
       } else if (evt.type === 'ChannelCreate') {
         const ch = evt as WsChannelCreate;
@@ -283,7 +348,7 @@ export const StoatChat = component$<{ token: string; chatState: StoatChatState }
     ws.onerror = () => { status.value = 'error'; };
 
     cleanup(() => { wsRef.value = null; try { ws.close(); } catch { /* ignore */ } });
-  });
+  }, { strategy: 'document-ready' });
 
   // ── Switch to server via parent ────────────────────────────────────────
   // eslint-disable-next-line qwik/no-use-visible-task

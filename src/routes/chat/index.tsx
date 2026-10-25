@@ -50,6 +50,7 @@ export default component$(() => {
     serverEmojis: {},
     activeVoiceChannelId: '',
     voiceParticipants: {},
+    voiceChannelByUser: {},
     liveKitUrl: '',
     liveKitToken: '',
   });
@@ -157,7 +158,7 @@ export default component$(() => {
       title: 'General Chemistry',
       description: 'General chat for all topics.',
       real: true,
-      code: 'https://chat.chemistryml.com/invite/TArGFQbJ'
+      code: 'https://chat.chemistryml.com/invite/XJG71mcg'
     },
     {
       icon: LuSparkles,
@@ -501,11 +502,13 @@ export default component$(() => {
                         // Set username before Auth.js session is created.
                         // Log in directly to get a temp token, then POST /onboard/complete.
                         try {
+                          console.log("Attempting to log in after registration.");
                           const loginRes = await fetch("https://chat.chemistryml.com/api/auth/session/login", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ email, password }),
                           });
+                          console.log("Login response status:", loginRes.status);
                           if (loginRes.ok) {
                             const loginData = await loginRes.json();
                             const tempToken: string | undefined = loginData.token;

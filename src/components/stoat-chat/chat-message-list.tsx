@@ -1,9 +1,9 @@
 import { component$, useSignal, useVisibleTask$, type QRL } from '@builder.io/qwik';
-import { LuPencil, LuReply, LuSmile, LuTrash2, LuX } from '@qwikest/icons/lucide';
+import { LuPencil, LuReply, LuSmile, LuTrash2, LuX, LuPhoneCall, LuPhone, LuInfo } from '@qwikest/icons/lucide';
 import {
   STOAT_AUTUMN,
   type StoatMsg, type StoatChatState,
-  formatTime,
+  formatTime, formatSystemMessage,
   deleteMessage, editMessage, reactToMessage, unreactFromMessage,
 } from './stoat_scripts';
 import { MarkdownMessage, isEmojiOnly } from './markdown-message';
@@ -87,11 +87,24 @@ export const ChatMessageList = component$<ChatMessageListProps>(
         {messages.map((msg, idx) => {
           const prev = idx > 0 ? messages[idx - 1] : null;
           const isGrouped = !!(prev && prev.author === msg.author &&
-            (msg.createdAt.getTime() - prev.createdAt.getTime()) < 120_000);
+            ((msg.createdAt.getTime() - prev.createdAt.getTime()) < 120_000 || msg.system));
+          const sysText = msg.system
+            ? formatSystemMessage(msg.system, chatState.userNames, msg.createdAt)
+            : null;
           return (
             <div key={msg._id} class={`group/msg relative hover:bg-(--color-edge)/10 rounded-md px-1 -mx-1 pt-0.5 ${isGrouped ? '-mt-3' : ''}`}>
 
+              {/* System message (call started, user joined, …) */}
+              {sysText && (
+                <div class=" font-courier font-bold flex items-center gap-2 py-1 text-xs text-muted">
+                  {msg.system?.type === 'call_started' ? (msg.system.finished_at ? <LuPhone class="text-base leading-none" /> : <LuPhoneCall class="text-base leading-none" />) : <LuInfo class="text-base leading-none" />}
+                  <span class="italic">{sysText}</span>
+                  <span class="text-[10px] text-muted/60">{formatTime(msg.createdAt)}</span>
+                </div>
+              )}
+
               {/* Hover action toolbar */}
+              {(
               <div class="absolute right-1 -top-3 hidden group-hover/msg:flex items-center gap-0.5 bg-(--color-surface) border border-(--color-rim) rounded-lg px-1.5 py-1 shadow-md z-20">
                 <button class="p-1 rounded hover:bg-(--color-edge) text-muted hover:text-ink transition-colors cursor-pointer" title="React with emoji"
                   onClick$={() => { onSetEmojiPickerFor(emojiPickerFor === msg._id ? '' : msg._id); }}>
@@ -100,20 +113,21 @@ export const ChatMessageList = component$<ChatMessageListProps>(
                 <button class="p-1 rounded hover:bg-(--color-edge) text-muted hover:text-ink transition-colors cursor-pointer" title="Reply"
                   onClick$={() => { onSetReplyTo(msg); onSetEmojiPickerFor(''); }}>
                   <LuReply class="h-3.5 w-3.5" />
-                </button>
-                {msg.author === chatState.currentUserId && (
-                  <>
+                  </button>
+                  {msg.author === chatState.currentUserId && 
                     <button class="p-1 rounded hover:bg-(--color-edge) text-muted hover:text-ink transition-colors cursor-pointer" title="Edit"
                       onClick$={() => { onSetEditingMsgId(msg._id); onSetEditingContent(msg.content ?? ''); onSetEmojiPickerFor(''); }}>
                       <LuPencil class="h-3.5 w-3.5" />
                     </button>
+                  }
+                  {msg.author === chatState.currentUserId || msg.system && (
                     <button class="p-1 rounded hover:bg-(--color-edge) text-red-400/70 hover:text-red-400 transition-colors cursor-pointer" title="Delete"
                       onClick$={async () => { await deleteMessage(activeId, msg._id, token); }}>
                       <LuTrash2 class="h-3.5 w-3.5" />
                     </button>
-                  </>
                 )}
               </div>
+              )}
 
               {/* Emoji picker popover */}
               {emojiPickerFor === msg._id && (
@@ -140,7 +154,14 @@ export const ChatMessageList = component$<ChatMessageListProps>(
                   )}
                 </div>
               )}
-
+              {/* Author */}
+              {!isGrouped && !sysText && (
+                <div class="text-xs font-semibold text-(--color-accent-muted) mb-0.5 flex items-end gap-2">
+                  <span>{chatState.userNames[msg.author] ?? msg.author}</span>
+                  <span class="text-[10px] font-normal text-muted/60">{formatTime(msg.createdAt)}</span>
+                  {msg.edited && <span class="text-[10px] font-normal text-muted/40 italic">(edited)</span>}
+                </div>
+              )}
               {/* Reply reference */}
               {(msg.replies?.length ?? 0) > 0 && (
                 <div class="flex items-center gap-1 ml-2 mb-0.5 text-xs text-muted">
@@ -148,25 +169,18 @@ export const ChatMessageList = component$<ChatMessageListProps>(
                   <span class="italic truncate">
                     {(() => {
                       const ref = messages.find(m => m._id === msg.replies![0]);
-                      const refAuthor = ref ? (chatState.userNames[ref.author] ?? 'Unknown') : 'Unknown';
-                      const refPreview = ref?.content?.slice(0, 60) ?? (ref?.attachments?.length ? '[attachment]' : '…');
+                      const refAuthor = ref ? ref.system ? 'System' : (chatState.userNames[ref.author] ?? 'Unknown') : 'Unknown';
+                      const refPreview = ref?.system ? formatSystemMessage(ref.system, chatState.userNames, ref.createdAt) : ref?.content?.slice(0, 60) ?? (ref?.attachments?.length ? '[attachment]' : '…');
                       return `${refAuthor}: ${refPreview}`;
                     })()}
                   </span>
                 </div>
               )}
 
-              {/* Author */}
-              {!isGrouped && (
-                <div class="text-xs font-semibold text-(--color-accent-muted) mb-0.5 flex items-end gap-2">
-                  <span>{chatState.userNames[msg.author] ?? msg.author}</span>
-                  <span class="text-[10px] font-normal text-muted/60">{formatTime(msg.createdAt)}</span>
-                  {msg.edited && <span class="text-[10px] font-normal text-muted/40 italic">(edited)</span>}
-                </div>
-              )}
+
 
               {/* Content — edit mode or normal */}
-              {editingMsgId === msg._id ? (
+              {sysText ? null : editingMsgId === msg._id ? (
                 <div class="flex items-center gap-2 mb-1">
                   <input
                     class="flex-1 rounded px-2 py-1 text-sm bg-(--color-edge) text-ink border border-(--color-rim) focus:outline-none"

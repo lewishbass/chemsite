@@ -2,7 +2,7 @@ import { component$, type QRL } from '@builder.io/qwik';
 import { LuChevronLeft, LuClock, LuUser, LuUserCheck, LuUserPlus } from '@qwikest/icons/lucide';
 import {
   type StoatMember, type StoatChatState,
-  avatarUrl, sendFriendRequest,
+  avatarUrl, sendFriendRequest, revokeFriendRequest,
 } from './stoat_scripts';
 
 const presenceColor = (p: string | undefined | null): string => {
@@ -57,7 +57,8 @@ export const ChatSidebarRight = component$<ChatSidebarRightProps>(
                 <div key={uid} class="group relative flex items-center gap-2 px-3 py-1.5 hover:bg-(--color-edge)/30 transition-colors">
                   <span class={`shrink-0 w-2 h-2 rounded-full ${presenceColor(m.status?.presence)}`} />
                   <span class="flex-1 text-xs text-ink truncate">{name}</span>
-                  {!isFriend && !isPending && usernameHash && (
+
+                  {uid !== chatState.currentUserId && !isFriend && !isPending && usernameHash && (
                     <button
                       class="shrink-0 text-muted hover:text-ink transition-colors opacity-0 group-hover:opacity-100"
                       title={`Send friend request to ${name}`}
@@ -69,8 +70,21 @@ export const ChatSidebarRight = component$<ChatSidebarRightProps>(
                       <LuUserPlus class="h-3 w-3" />
                     </button>
                   )}
-                  {isPending && <span title="Request sent"><LuClock class="shrink-0 h-3 w-3 text-muted opacity-60" /></span>}
-                  {isFriend && <span title="Friends"><LuUserCheck class="shrink-0 h-3 w-3 text-muted opacity-60" /></span>}
+                  {uid !== chatState.currentUserId && isPending && (
+                    <button
+                      class="shrink-0 text-muted hover:text-red-400 transition-colors cursor-pointer"
+                      title="Revoke friend request"
+                      onClick$={async () => {
+                        const ok = await revokeFriendRequest(uid, token);
+                        if (ok) {
+                          chatState.relations = chatState.relations.filter(r => r._id !== uid);
+                        }
+                      }}
+                    >
+                      <LuClock class="shrink-0 h-3 w-3 text-muted opacity-60" />
+                    </button>
+                  )}
+                  {uid !== chatState.currentUserId && isFriend && <span title="Friends"><LuUserCheck class="shrink-0 h-3 w-3 text-muted opacity-60" /></span>}
 
                   {/* Hover popup */}
                   <div class="hidden group-hover:flex absolute right-full mr-2 top-1/2 -translate-y-1/2 z-50 flex-col items-center gap-2 bg-(--color-canvas) border border-(--color-rim) rounded-lg p-3 shadow-xl w-40 pointer-events-none">

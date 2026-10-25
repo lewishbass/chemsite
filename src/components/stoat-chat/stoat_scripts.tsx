@@ -43,6 +43,17 @@ export function formatTime(d: Date): string {
   return isToday ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+export type StoatSystemMessage = {
+  type: string;
+  by?: string;        // actor user id (call_started, user_added, …)
+  id?: string;        // target user id (user_added, user_joined, message_pinned, …)
+  name?: string;      // channel_renamed
+  from?: string;      // channel_ownership_changed
+  to?: string;        // channel_ownership_changed
+  content?: string;   // text
+  finished_at?: string | null; // call_started — set when the call has ended
+};
+
 export type StoatMsg = {
   _id: string;
   content?: string | null;
@@ -51,9 +62,51 @@ export type StoatMsg = {
   attachments?: StoatAttachment[];
   reactions?: Record<string, string[]>;
   replies?: string[];
+  system?: StoatSystemMessage | null; // system-generated message (call started, user joined, …)
   createdAt: Date;     // decoded from ULID _id
   edited?: string | null; // ISO timestamp from server, present when edited
 };
+
+/** Human-readable text for a system message, or null if unknown type. */
+export function formatSystemMessage(
+  sys: StoatSystemMessage,
+  userNames: Record<string, string>,
+  msgCreatedAt?: Date,
+): string | null {
+  const name = (uid?: string) => (uid ? (userNames[uid] ?? 'Someone') : 'Someone');
+  switch (sys.type) {
+    case 'text': return sys.content ?? null;
+    case 'user_added': return `${name(sys.by)} added ${name(sys.id)}`;
+    case 'user_remove': return `${name(sys.by)} removed ${name(sys.id)}`;
+    case 'user_joined': return `${name(sys.id)} joined`;
+    case 'user_left': return `${name(sys.id)} left`;
+    case 'user_kicked': return `${name(sys.id)} was kicked`;
+    case 'user_banned': return `${name(sys.id)} was banned`;
+    case 'channel_renamed': return `${name(sys.by)} renamed the channel to “${sys.name ?? ''}”`;
+    case 'channel_description_changed': return `${name(sys.by)} changed the channel description`;
+    case 'channel_icon_changed': return `${name(sys.by)} changed the channel icon`;
+    case 'channel_ownership_changed': return `${name(sys.by)} transferred ownership to ${name(sys.to)}`;
+    case 'message_pinned': return `${name(sys.by)} pinned a message`;
+    case 'message_unpinned': return `${name(sys.by)} unpinned a message`;
+    case 'call_started': {
+      if (!sys.finished_at) return `${name(sys.by)} started a call`;
+      // Duration = finished_at − call start (the message's own ULID timestamp)
+      const end = new Date(sys.finished_at).getTime();
+      const start = msgCreatedAt?.getTime() ?? end;
+      const totalSec = Math.max(0, Math.round((end - start) / 1000));
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+      const duration = h > 0
+        ? `${h}h ${m}m`
+        : m > 0
+          ? `${m}m ${s}s`
+          : `${s}s`;
+      return `${name(sys.by)}'s call lasted ${duration}`;
+    }
+    default: return null;
+  }
+}
 
 export type StoatChannel = {
   _id: string;
@@ -137,15 +190,45 @@ export type VoiceStateUpdatePayload = {
   video?: boolean;
 };
 
-/** Voice state of a single participant in a voice channel. */
+/** Voice state of a single participant in a voice channel (legacy shape). */
 export type VoiceState = {
   user_id: string;
   mute: boolean;
   deaf: boolean;
   video: boolean;
+  screensharing?: boolean;
   self_mute: boolean;
   self_deaf: boolean;
 };
+
+/**
+ * New Stoat EventV1 voice state (UserVoiceState).
+ * `id` is the user id; `is_publishing` false ≈ muted; camera/screensharing drive video tiles.
+ */
+export type UserVoiceState = {
+  id: string;                 // user id
+  joined_at?: string | null;  // ISO timestamp
+  is_receiving?: boolean;
+  is_publishing?: boolean;
+  camera?: boolean;
+  screensharing?: boolean;
+};
+
+/** Partial variant broadcast by UserVoiceStateUpdate — every field optional. */
+export type PartialUserVoiceState = Partial<UserVoiceState>;
+
+/** Map a new-format UserVoiceState into the legacy VoiceState shape used by the UI. */
+export function userVoiceStateToVoiceState(s: UserVoiceState): VoiceState {
+  return {
+    user_id: s.id,
+    mute: s.is_publishing === false,
+    deaf: false,
+    video: !!(s.camera || s.screensharing),
+    screensharing: !!s.screensharing,
+    self_mute: s.is_publishing === false,
+    self_deaf: false,
+  };
+}
 
 export type RelationshipStatus =
   | 'Friend' | 'Incoming' | 'Outgoing'
@@ -175,6 +258,12 @@ export type WsReady = {
   servers: StoatServer[];
   channels: StoatChannel[];
   emojis?: StoatEmoji[];
+  /** Current voice states across all channels — lets the sidebar show who is in voice before you join.
+   *  Each entry is a channel: { id: <channel_id>, participants: [{ id: <user_id>, ...UserVoiceState }] } */
+  voice_states?: Array<{
+    id: string; // channel id
+    participants?: Array<UserVoiceState & { joined_at?: string | null }>;
+  }>;
 };
 
 export type WsMessage = {
@@ -187,13 +276,19 @@ export type WsMessage = {
   replies?: string[];
   mentions?: string[];  // user IDs of @mentioned users
   edited?: string | null; // ISO timestamp when edited
+  system?: StoatSystemMessage | null; // system-generated message payload
 };
 
 export type WsMessageUpdate = {
   type: 'MessageUpdate';
   id: string;
   channel: string;
-  data: { content?: string | null; edited?: string | null };
+  data: {
+    content?: string | null;
+    edited?: string | null;
+    system?: StoatSystemMessage | null; // system messages are updated in place (e.g. call_started gains finished_at when the call ends)
+  };
+  clear?: string[];
 };
 
 export type WsMessageDelete = {
@@ -259,41 +354,38 @@ export type WsMessageUnreact = {
   emoji_id: string;
 };
 
-// ── WebSocket voice event types ────────────────────────────────────────────────
+// ── WebSocket voice event types (new Stoat EventV1 format) ────────────────────
 
+/** VoiceChannelJoin — `id` is the channel id, `state.id` is the joining user's id. */
 export type WsVoiceChannelJoin = {
   type: 'VoiceChannelJoin';
-  data: {
-    channel_id: string;
-    state: VoiceState;
-  };
+  id: string;               // channel id
+  state: UserVoiceState;    // full voice state of the joining user
 };
 
+/** VoiceChannelLeave — `id` is the channel id, `user` is the leaving user's id. */
 export type WsVoiceChannelLeave = {
   type: 'VoiceChannelLeave';
-  data: {
-    user_id: string;
-    channel_id: string;
-  };
+  id: string;   // channel id
+  user: string; // user id
 };
 
+/** VoiceChannelMove — user moved between channels by a moderator. */
 export type WsVoiceChannelMove = {
   type: 'VoiceChannelMove';
-  data: {
-    user_id: string;
-    from: string;
-    to: string;
-    state: VoiceState;
-  };
+  user: string;             // moved user id
+  from: string;             // old channel id
+  to: string;               // new channel id
+  state: UserVoiceState;    // full voice state in the new channel
 };
 
+/** UserVoiceStateUpdate — partial voice state change (mute/deafen/camera/…).
+ *  Actual payload: { id: <user_id>, channel_id: <channel_id>, data: { is_publishing, ... } } */
 export type WsVoiceStateUpdate = {
-  type: 'VoiceStateUpdate';
-  data: {
-    user_id: string;
-    channel_id: string;
-    state: VoiceState;
-  };
+  type: 'UserVoiceStateUpdate' | 'VoiceStateUpdate';
+  id: string;                       // user id
+  channel_id?: string;              // channel id
+  data: PartialUserVoiceState;      // only the changed fields
 };
 
 export type WsEvent =
@@ -332,6 +424,7 @@ export type StoatChatState = {
   // Voice state
   activeVoiceChannelId: string;          // '' means not in a voice channel
   voiceParticipants: Record<string, VoiceState>; // userId → voice state
+  voiceChannelByUser: Record<string, string>;    // userId → voice channel id they are in
   liveKitUrl: string;                    // cached LiveKit URL for reconnects
   liveKitToken: string;                  // cached LiveKit JWT for reconnects
 };
@@ -358,6 +451,7 @@ export async function fetchMessages(
       attachments: m.attachments as StoatAttachment[] | undefined,
       reactions: m.reactions as Record<string, string[]> | undefined,
       replies: m.replies as string[] | undefined,
+      system: (m.system as StoatSystemMessage | null | undefined) ?? null,
       createdAt: ulidToDate(m._id as string),
       edited: (m.edited as string | null) ?? null,
     }));
@@ -596,6 +690,36 @@ export async function sendFriendRequest(
   } catch {
     return false;
   }
+}
+
+/**
+ * Revoke an outgoing friend request (also denies an incoming one).
+ * Stoat native route: DELETE /users/{target}/friend
+ */
+export async function revokeFriendRequest(
+  userId: string,
+  token: string,
+): Promise<boolean> {
+  try {
+    const r = await fetch(`${STOAT_BASE}/api/users/${encodeURIComponent(userId)}/friend`, {
+      method: 'DELETE',
+      headers: { 'x-session-token': token },
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Remove an existing friend (unfriend).
+ * Same Stoat native route: DELETE /users/{target}/friend
+ */
+export async function unfriend(
+  userId: string,
+  token: string,
+): Promise<boolean> {
+  return revokeFriendRequest(userId, token);
 }
 
 export async function fetchUserBanner(
