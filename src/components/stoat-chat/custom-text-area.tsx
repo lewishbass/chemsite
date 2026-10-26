@@ -17,6 +17,10 @@ interface CustomTextAreaProps {
 // Caret offsets are measured in serialized characters (an emoji counts as its ":ID:" length).
 const savedOffsets = new WeakMap<Element, number>();
 
+// render() replaces the DOM, which wipes native undo, so history is kept manually.
+interface Hist { stack: { v: string; off: number; pre: number }[]; idx: number; at: number }
+const histories = new WeakMap<Element, Hist>();
+
 function serialize(el: Element): string {
   let out = '';
   el.childNodes.forEach((n) => {
@@ -109,7 +113,7 @@ function render(el: Element, text: string, emojis: Record<string, StoatEmoji>) {
     img.title = `:${emoji.name}:`;
     img.dataset.emoji = m[0];
     img.draggable = false;
-    img.className = 'inline-block h-5 w-5 align-text-bottom mx-0.5';
+      img.className = 'inline-block h-5 w-5 align-[-0.15em] mx-0';
     frag.append(img);
     last = m.index + m[0].length;
   }
@@ -141,6 +145,7 @@ export const CustomTextArea = component$<CustomTextAreaProps>(
       const el = editorRef.value as HTMLElement | undefined;
       if (!el) return;
       let composing = false;
+        let pendingPre: number | null = null;
       el.setAttribute('contenteditable', 'plaintext-only');
       if (el.contentEditable !== 'plaintext-only') el.contentEditable = 'true';
 
@@ -162,12 +167,43 @@ export const CustomTextArea = component$<CustomTextAreaProps>(
       const onInput = () => {
         if (!composing) reconcile();
         const v = serialize(el);
+            const h = histories.get(el) ?? { stack: [{ v: '', off: 0, pre: 0 }], idx: 0, at: 0 };
+            histories.set(el, h);
+            if (v !== h.stack[h.idx].v) {
+                const off = getOffset(el) ?? v.length;
+                const now = Date.now();
+                if (now - h.at < 400 && h.idx > 0) h.stack[h.idx] = { v, off, pre: h.stack[h.idx].pre };
+                else { h.stack.splice(h.idx + 1); h.stack.push({ v, off, pre: pendingPre ?? off }); h.idx++; }
+                h.at = now;
+            }
+            pendingPre = null;
+            onValueChange$(v);
+        };
+        const stepHistory = (dir: 1 | -1) => {
+            const h = histories.get(el);
+            if (!h || !h.stack[h.idx + dir]) return;
+            // Undo returns the caret to where the undone edit began; redo to where it ended.
+            const caret = dir < 0 ? h.stack[h.idx].pre : h.stack[h.idx + 1].off;
+            h.idx += dir;
+            h.at = 0;
+            const { v } = h.stack[h.idx];
+            render(el, v, serverEmojis);
+            setOffset(el, caret);
+            resize();
         onValueChange$(v);
       };
       const onCompStart = () => { composing = true; };
       const onCompEnd = () => { composing = false; onInput(); };
       const onKeyDown = (e: KeyboardEvent) => {
         if (composing || e.isComposing) return;
+          if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+              const k = e.key.toLowerCase();
+              if (k === 'z' || k === 'y') {
+                  e.preventDefault();
+                  stepHistory(k === 'y' || e.shiftKey ? 1 : -1);
+                  return;
+              }
+          }
         if (e.key === 'Enter' && !e.shiftKey && onEnter$) {
           e.preventDefault();
           onEnter$();
@@ -181,6 +217,7 @@ export const CustomTextArea = component$<CustomTextAreaProps>(
               : n.nodeType === Node.TEXT_NODE && o === 0 && n.parentNode === el ? n.previousSibling : null;
             if (prev instanceof HTMLElement && prev.dataset.emoji) {
               e.preventDefault();
+                pendingPre = getOffset(el);
               prev.remove();
               onInput();
             }
@@ -204,7 +241,9 @@ export const CustomTextArea = component$<CustomTextAreaProps>(
         const off = getOffset(el);
         if (off !== null) savedOffsets.set(el, off);
       };
+        const onBeforeInput = () => { pendingPre = getOffset(el); };
 
+        el.addEventListener('beforeinput', onBeforeInput);
       el.addEventListener('input', onInput);
       el.addEventListener('keydown', onKeyDown);
       el.addEventListener('paste', onPaste);
@@ -214,6 +253,7 @@ export const CustomTextArea = component$<CustomTextAreaProps>(
       el.addEventListener('compositionstart', onCompStart);
       el.addEventListener('compositionend', onCompEnd);
       cleanup(() => {
+          el.removeEventListener('beforeinput', onBeforeInput);
         el.removeEventListener('input', onInput);
         el.removeEventListener('keydown', onKeyDown);
         el.removeEventListener('paste', onPaste);
@@ -233,6 +273,7 @@ export const CustomTextArea = component$<CustomTextAreaProps>(
       const el = editorRef.value as HTMLElement | undefined;
       if (!el || v === serialize(el)) return;
       render(el, v, emojis);
+        histories.set(el, { stack: [{ v, off: v.length, pre: v.length }], idx: 0, at: 0 });
       el.style.height = 'auto';
       el.style.height = Math.min(el.scrollHeight, maxHeight) + 'px';
     });
