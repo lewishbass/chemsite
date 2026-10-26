@@ -164,13 +164,15 @@ export default component$(() => {
       icon: LuSparkles,
       title: 'AI Experiments',
       description: 'Share models, compare outputs, and share agentic workflows.',
-      real: false,
+      real: true,
+      code: 'https://chat.chemistryml.com/invite/DBWs5B6t'
     },
     {
       icon: LuOrbit,
       title: 'Workflow Automation',
       description: 'Trade ideas for pipelines, batch processing, and reproducibility.',
-      real: false,
+      real: true,
+      code: 'https://chat.chemistryml.com/invite/zXDA6qJm'
     },
     /*
     
