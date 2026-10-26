@@ -289,6 +289,11 @@
   to   { opacity: 0; transform: translateY(1em); }
 }
 
+.custom-text-area:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-muted);
+  pointer-events: none;
+}
 
 .mini-scroll::-webkit-scrollbar {
   width: 4px;

@@ -85,7 +85,7 @@ export const EmojiPicker = component$<EmojiPickerProps>(
                   {server.map((e) => (
                     <button key={e._id} title={e.name} aria-label={e.name}
                       class="p-0.5 rounded hover:bg-edge cursor-pointer"
-                      onClick$={() => onPick$(e._id)}>
+                      onClick$={() => onPick$(':' + e._id + ':')}>
                       <img src={`${STOAT_AUTUMN}/emojis/${e._id}`} alt={e.name} width="24" height="24" class="h-6 w-6" />
                     </button>
                   ))}

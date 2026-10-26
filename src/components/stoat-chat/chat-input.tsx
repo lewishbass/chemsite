@@ -5,6 +5,7 @@ import {
   uploadAttachment,
 } from './stoat_scripts';
 import { EmojiPicker } from './emoji-picker';
+import { CustomTextArea, insertAtCaret } from './custom-text-area';
 
 interface ChatInputProps {
   chatState: StoatChatState;
@@ -33,6 +34,19 @@ export const ChatInput = component$<ChatInputProps>(
     const showEmojiPicker = useSignal(false);
 
     const input_style = "w-full rounded-lg px-6 py-2.5 active:outline-none focus:ring-none focus:outline-none focus:bg-(--color-canvas)/50 transition-colors duration-300 text-(--color-ink) resize-none mini-scroll";
+
+    const submit = $(async () => {
+      const content = inputText.value.trim();
+      if ((!content && !pendingAttachmentIds.value.length) || !activeId || sending) return;
+      inputText.value = '';
+      if (typingTimeoutId.value !== null) { clearTimeout(typingTimeoutId.value); typingTimeoutId.value = null; }
+      const attIds = [...pendingAttachmentIds.value];
+      const replyMsg = replyTo;
+      pendingAttachmentIds.value = [];
+      pendingAttachmentPreviews.value = [];
+      onSetReplyTo(null);
+      await onSend(content, activeId, replyMsg, attIds);
+    });
 
     const uploadFiles = $(async (files: File[]) => {
       const uploads = [];
@@ -159,29 +173,21 @@ export const ChatInput = component$<ChatInputProps>(
               onClose$={() => { showEmojiPicker.value = false; }}
               onPick$={(emoji) => {
                 showEmojiPicker.value = false;
-                const pos = textareaRef.value ? (textareaRef.value as HTMLTextAreaElement).selectionStart : inputText.value.length;
-                inputText.value = inputText.value.slice(0, pos) + emoji + inputText.value.slice(pos);
-                if (textareaRef.value) {
-                  const ta = textareaRef.value as HTMLTextAreaElement;
-                  ta.focus();
-                  setTimeout(() => {
-                    ta.selectionStart = ta.selectionEnd = pos + emoji.length;
-                  }, 10);
-                }
+                if (textareaRef.value) insertAtCaret(textareaRef.value, emoji);
+                else inputText.value += emoji;
               }}
             />
           )}
 
-          <textarea
-            ref={textareaRef}
-            rows={1}
+          <CustomTextArea
+            editorRef={textareaRef}
+            serverEmojis={chatState.serverEmojis}
             placeholder={`Message #${activeName || 'general'}…`}
             class={input_style + " -mr-0.5"}
             value={inputText.value}
-            onInput$={(_, el) => {
-              inputText.value = el.value;
-              el.style.height = 'auto';
-              el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+            onEnter$={() => { if (!sending) submit(); }}
+            onValueChange$={(v) => {
+              inputText.value = v;
               if (onTyping && activeId) {
                 onTyping(activeId, false);
                 if (typingTimeoutId.value !== null) clearTimeout(typingTimeoutId.value);
@@ -191,48 +197,12 @@ export const ChatInput = component$<ChatInputProps>(
                 }, 2500) as unknown as ReturnType<typeof setTimeout>;
               }
             }}
-            onKeyDown$={async (e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                if (!sending) {
-                  const content = inputText.value.trim();
-                  if ((!content && !pendingAttachmentIds.value.length) || !activeId || sending) return;
-                  const text = content;
-                  inputText.value = '';
-                  if (typingTimeoutId.value !== null) { clearTimeout(typingTimeoutId.value); typingTimeoutId.value = null; }
-                  const attIds = [...pendingAttachmentIds.value];
-                  const replyMsg = replyTo;
-                  pendingAttachmentIds.value = [];
-                  pendingAttachmentPreviews.value = [];
-                  onSetReplyTo(null);
-                  if (textareaRef.value) {
-                    (textareaRef.value as HTMLTextAreaElement).style.height = 'auto';
-                  }
-                  await onSend(text, activeId, replyMsg, attIds);
-                }
-              }
-            }}
           />
           <div class="bg-rim w-px h-[65%] self-center relative z-20" />
           <button
             class="shrink-0 text-sm px-8 py-4 disabled:opacity-40 disabled:pointer-events-none cursor-pointer hover:bg-canvas transition-colors -ml-0.5"
             disabled={sending}
-            onClick$={async () => {
-              const content = inputText.value.trim();
-              if ((!content && !pendingAttachmentIds.value.length) || !activeId || sending) return;
-              const text = content;
-              inputText.value = '';
-              if (typingTimeoutId.value !== null) { clearTimeout(typingTimeoutId.value); typingTimeoutId.value = null; }
-              const attIds = [...pendingAttachmentIds.value];
-              const replyMsg = replyTo;
-              pendingAttachmentIds.value = [];
-              pendingAttachmentPreviews.value = [];
-              onSetReplyTo(null);
-              if (textareaRef.value) {
-                (textareaRef.value as HTMLTextAreaElement).style.height = 'auto';
-              }
-              await onSend(text, activeId, replyMsg, attIds);
-            }}
+            onClick$={() => submit()}
           >
             Send
           </button>
